@@ -980,10 +980,9 @@ function App(){
             <SnapLogo height={26}/><div style={{width:1,height:20,background:"#2a2a2a",flexShrink:0}}/>
             <div><div style={{fontFamily:"Bebas Neue",fontSize:"0.95rem",color:"#ccc",letterSpacing:"0.12em",lineHeight:1}}>WATAGAN PARK</div><div style={{fontSize:"0.58rem",color:"#444",marginTop:2}}>Session #{appState.sessions+1} · Cycle {Math.floor(appState.sessions/daySeq.length)+1}</div></div>
           </div>
-          <div style={{display:"flex",gap:4,flexWrap:"nowrap",overflow:"hidden",maxWidth:200,alignItems:"center"}}>
-            <span onClick={()=>setView("focus")} style={{fontSize:"0.52rem",fontWeight:700,color:aiOn?"#69f0ae":"#444",background:aiOn?"#0d1a1033":"#1a1a1a",border:`1px solid ${aiOn?"#69f0ae44":"#2a2a2a"}`,padding:"2px 6px",borderRadius:20,whiteSpace:"nowrap",cursor:"pointer",flexShrink:0}}>{aiOn?"🤖 AI ON":"📋 Smart Plan"}</span>
-            {activeBadges.slice(0,2).map((b,i)=>(<span key={i} onClick={()=>setView("focus")} style={{fontSize:"0.52rem",fontWeight:700,color:b.color,background:`${b.color}15`,border:`1px solid ${b.color}40`,padding:"2px 6px",borderRadius:20,whiteSpace:"nowrap",cursor:"pointer",flexShrink:0}}>{b.label}</span>))}
-            {activeBadges.length>2&&<span style={{fontSize:"0.52rem",color:"#555",padding:"2px 4px",flexShrink:0}}>+{activeBadges.length-2}</span>}
+          <div style={{display:"flex",gap:5,alignItems:"center",flexShrink:0}}>
+            <span onClick={()=>setView("focus")} style={{fontSize:"0.52rem",fontWeight:700,color:aiOn?"#69f0ae":"#555",background:aiOn?"rgba(105,240,174,0.08)":"transparent",border:`1px solid ${aiOn?"rgba(105,240,174,0.3)":"#2a2a2a"}`,padding:"3px 8px",borderRadius:20,whiteSpace:"nowrap",cursor:"pointer"}}>{aiOn?"🤖 AI ON":"📋 Smart Plan"}</span>
+            {activeBadges.length>0&&(<span onClick={()=>setView("focus")} style={{fontSize:"0.52rem",fontWeight:700,color:"#ffd740",background:"rgba(255,215,64,0.08)",border:"1px solid rgba(255,215,64,0.3)",padding:"3px 8px",borderRadius:20,whiteSpace:"nowrap",cursor:"pointer"}}>⚠ {activeBadges.length} restriction{activeBadges.length!==1?"s":""}</span>)}
           </div>
         </div>
         <div style={{display:"flex",borderTop:"1px solid #1a1a1a"}}>
