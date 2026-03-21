@@ -1,0 +1,25 @@
+{
+  "name": "SnapFit Tracker — Watagan Park",
+  "short_name": "SnapFit",
+  "description": "AI-powered workout tracker for Snap Fitness Watagan Park",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0e0e0e",
+  "theme_color": "#e31837",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='192' height='192'%3E%3Crect width='192' height='192' rx='38' fill='%23e31837'/%3E%3Ctext x='20' y='90' font-family='Arial Black,Arial' font-weight='900' font-size='58' fill='white'%3Esnap%3C/text%3E%3Ctext x='10' y='158' font-family='Arial Black,Arial' font-weight='900' font-size='53' fill='white'%3Efitness%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='512' height='512'%3E%3Crect width='512' height='512' rx='100' fill='%23e31837'/%3E%3Ctext x='52' y='240' font-family='Arial Black,Arial' font-weight='900' font-size='155' fill='white'%3Esnap%3C/text%3E%3Ctext x='22' y='420' font-family='Arial Black,Arial' font-weight='900' font-size='140' fill='white'%3Efitness%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
