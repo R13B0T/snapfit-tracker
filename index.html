@@ -9,7 +9,9 @@
   <meta name="apple-mobile-web-app-title" content="SnapFit"/>
   <meta name="theme-color" content="#0e0e0e"/>
   <meta name="mobile-web-app-capable" content="yes"/>
+  <link rel="manifest" href="manifest.json"/>
   <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Crect width='180' height='180' rx='38' fill='%23e31837'/%3E%3Ctext x='18' y='85' font-family='Arial Black,Arial' font-weight='900' font-size='54' fill='white'%3Esnap%3C/text%3E%3Ctext x='8' y='150' font-family='Arial Black,Arial' font-weight='900' font-size='50' fill='white'%3Efitness%3C/text%3E%3C/svg%3E"/>
+  <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('./sw.js').catch(()=>{});});}</script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -19,7 +21,8 @@
 <div id="root"></div>
 <script type="text/babel">
 const{useState,useEffect,useRef}=React;
-const STORAGE_KEY="snapfit_v10";
+const STORAGE_KEY="snapfit_v11";
+const OLD_STORAGE_KEY="snapfit_v10";
 const appStyle=`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap');*{box-sizing:border-box;margin:0;padding:0;}body{background:#0e0e0e;}::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-track{background:#1a1a1a;}::-webkit-scrollbar-thumb{background:#e31837;border-radius:2px;}@keyframes slideUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}@keyframes spin{to{transform:rotate(360deg)}}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes popIn{0%{transform:scale(0.85);opacity:0}60%{transform:scale(1.05)}100%{transform:scale(1);opacity:1}}.dur-slider{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:3px;outline:none;cursor:pointer;}.dur-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:24px;height:24px;border-radius:50%;background:#e31837;cursor:pointer;border:3px solid #0e0e0e;box-shadow:0 0 0 2px #e31837;}.dur-slider::-moz-range-thumb{width:24px;height:24px;border-radius:50%;background:#e31837;cursor:pointer;border:3px solid #0e0e0e;}@keyframes rebuildPulse{0%{opacity:1}50%{opacity:0.4}100%{opacity:1}}`;
 
 const DEFAULT_FOCUS={trainingFocus:"balanced",workoutDuration:45,deload:false,skipKnees:false,skipAnkle:false,skipShoulders:false,skipBack:false,skipChest:false,customNote:""};
@@ -115,6 +118,19 @@ const EXERCISE_LIBRARY={
 };
 
 const DAY_TYPES=[{id:"A",label:"DAY A",name:"Push & Legs",color:"#e31837"},{id:"B",label:"DAY B",name:"Pull & Core",color:"#4fc3f7"},{id:"C",label:"DAY C",name:"Full Body Power",color:"#69f0ae"}];
+
+// Unified exercise name map from entire library (used for CSV export/import)
+const EXERCISE_NAME_MAP=(()=>{
+  const m={...SEED_NAMES};
+  Object.values(EXERCISE_LIBRARY).forEach(days=>days.forEach(pool=>pool.forEach(ex=>{if(!m[ex.id])m[ex.id]=ex.name;})));
+  return m;
+})();
+
+// Variable cycle sequences (2–5 days per cycle)
+const DAY_SEQUENCES={2:["A","B"],3:["A","B","C"],4:["A","B","C","B"],5:["A","B","C","A","B"]};
+function getDaySeq(profile){return DAY_SEQUENCES[profile?.workoutsPerCycle||3]||DAY_SEQUENCES[3];}
+function getDayTypeAtIdx(cycleIdx,profile){const seq=getDaySeq(profile);return DAY_TYPES.find(d=>d.id===seq[cycleIdx%seq.length])||DAY_TYPES[0];}
+
 const EFFORT_RATINGS=[{key:"light",emoji:"😎",label:"Too Light",desc:"Could've done way more",color:"#4fc3f7"},{key:"nailed",emoji:"💪",label:"Nailed It",desc:"Hit it perfectly",color:"#69f0ae"},{key:"tough",emoji:"😤",label:"Really Tough",desc:"Ground it out — good work",color:"#ffd740"},{key:"failed",emoji:"🔴",label:"Nearly Failed",desc:"Struggled to finish",color:"#ff6b6b"}];
 const FB_TITLES={A:["Leg & Push Power","Quad & Chest Builder","Push Day Grind"],B:["Back Attack","Pull & Core Crusher","Row Day"],C:["Full Body Blitz","Total Body Strength","Head to Toe"]};
 const FB_TIPS={A:["Drive through heels on every leg movement","Control the negative — 2 seconds down","Full range beats heavy weight every time"],B:["Pull with elbows, not hands","Squeeze at peak contraction — 1 second","Retract shoulder blades on every row"],C:["Full body — stay focused between exercises","Quality over quantity on every compound","Breathe out on effort, in on return"]};
@@ -165,9 +181,18 @@ function getRec(exId,startWeight,weights,focus){
 }
 function buildPerfNotes(history,weights){return history.slice(0,3).map(h=>{const lines=(h.exerciseIds||[]).map(id=>{const w=weights[id];if(!w||!w.lastAvgReps)return null;return`${id}:${Number(w.lastAvgReps).toFixed(1)}/${w.lastTargetReps}@${w.lastWeight}kg`;}).filter(Boolean);return lines.length?`${h.date}: ${lines.join(",")}`:null;}).filter(Boolean).join("\n");}
 function buildSeedSummary(weights){return Object.entries(weights).map(([id,w])=>`${SEED_NAMES[id]||id}:${w.weight}kg*${w.lastTargetReps}reps`).join(", ");}
-function buildFocusInstructions(focus){
+function buildFocusInstructions(focus,profile){
   const dur=getDurationConfig(focus.workoutDuration||45);
   const p=[dur.aiNote];
+  // User profile context
+  if(profile){
+    const goalMap={lose_weight:"lose weight",build_muscle:"build muscle",both:"build muscle and lose weight",maintain:"maintain fitness"};
+    const goalStr=goalMap[profile.goal]||profile.goal||"general fitness";
+    const genderStr=profile.gender||"unspecified";
+    const ageStr=profile.age?`${profile.age} years old`:"unspecified age";
+    const cycleStr=`${profile.workoutsPerCycle||3}-day cycle`;
+    p.unshift(`USER PROFILE: ${ageStr}, ${genderStr}, goal: ${goalStr}, training on a ${cycleStr}. Tailor intensity, rep ranges, and progressions accordingly.`);
+  }
   if(focus.trainingFocus==="upper")p.push("FOCUS: Upper body ONLY.");if(focus.trainingFocus==="lower")p.push("FOCUS: Lower body ONLY.");if(focus.trainingFocus==="core")p.push("FOCUS: Core + upper.");if(focus.deload)p.push("DELOAD: Reduce weights 20%, increase reps 2-3.");if(focus.skipKnees)p.push("SKIP KNEES: No leg press/extension/squats.");if(focus.skipAnkle)p.push("SKIP ANKLE: No calf raises, lunges, sled, single-leg balance.");if(focus.skipShoulders)p.push("SKIP SHOULDERS: No overhead press or lateral raises.");if(focus.skipBack)p.push("SKIP BACK: No rows or back extensions.");if(focus.skipChest)p.push("SKIP CHEST: No pressing or pec fly.");if(focus.customNote)p.push(`USER NOTE: ${focus.customNote}`);return"\n\nSPECIAL INSTRUCTIONS (MUST FOLLOW):\n"+p.join("\n");
 }function getNextSetSuggestion(weight,reps,targetReps,rating,inc){
   if(!rating)return null;const r=EFFORT_RATINGS.find(e=>e.key===rating);if(!r)return null;
@@ -180,24 +205,29 @@ function buildFocusInstructions(focus){
   return null;
 }
 
-async function tryAIWorkout(dayType,sessionNum,recentIds,perfNotes,weights,focus){
-  const fi=buildFocusInstructions(focus);
-  const system=`You are a personal trainer AI for Snap Fitness Watagan Park. USER goal: build muscle + lose weight. 3-day cycle A/B/C.\nESTABLISHED STRENGTH: ${buildSeedSummary(weights)}\n\n${EQUIP_STR}\n${fi}\n\nRULES: Every exercise MUST use a station number from the list above. equipNum must be the exact number string. name must match station. Follow ALL special instructions. Respond ONLY valid JSON.`;
+function getAIHeaders(){
+  const key=localStorage.getItem("snapfit_apikey")||"";
+  if(!key)throw new Error("no_key");
+  return{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"};
+}
+async function tryAIWorkout(dayType,sessionNum,recentIds,perfNotes,weights,focus,profile){
+  const fi=buildFocusInstructions(focus,profile);
+  const system=`You are a personal trainer AI for Snap Fitness Watagan Park.\nESTABLISHED STRENGTH: ${buildSeedSummary(weights)}\n\n${EQUIP_STR}\n${fi}\n\nRULES: Every exercise MUST use a station number from the list above. equipNum must be the exact number string. name must match station. Follow ALL special instructions. Respond ONLY valid JSON.`;
   const msg=`Session #${sessionNum} - ${dayType.name} (Day ${dayType.id})\nAvoid repeating: ${recentIds.join(",")||"none"}\n${perfNotes?`Recent performance:\n${perfNotes}`:""}\nGenerate 5-6 exercises. Adjust weights/sets for progressive overload.\n{"sessionTitle":"title","focusTip":"tip max 14 words","exercises":[{"id":"snake_case","name":"Exact station name","equipNum":"num","sets":3,"reps":12,"weightIncrement":2.5,"startWeight":10,"muscleGroup":"Chest","note":"tip or null"}]}`;
   const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),9000);
-  const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system,messages:[{role:"user",content:msg}]}),signal:ctrl.signal});
-  if(!res.ok)throw new Error();
+  const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:getAIHeaders(),body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system,messages:[{role:"user",content:msg}]}),signal:ctrl.signal});
+  if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(err?.error?.message||`HTTP ${res.status}`);}
   const data=await res.json();
   const text=(data.content||[]).map(b=>b.text||"").join("").replace(/```json|```/g,"").trim();
   return{...JSON.parse(text),isFallback:false};
 }
-async function tryAIRemix(exercise,otherNames,dayType,weights,focus){
-  const fi=buildFocusInstructions(focus);
+async function tryAIRemix(exercise,otherNames,dayType,weights,focus,profile){
+  const fi=buildFocusInstructions(focus,profile);
   const system=`Personal trainer AI, Snap Fitness Watagan Park.\n${EQUIP_STR}\n${fi}\nOnly use stations from list. Respond ONLY valid JSON.`;
   const msg=`Station #${exercise.equipNum} "${exercise.name}" busy. Find replacement for "${exercise.muscleGroup}". NOT: ${otherNames.join(",")}. Keep ${exercise.sets}x${exercise.reps}.\n{"id":"snake_case","name":"Exact station name","equipNum":"num","sets":${exercise.sets},"reps":${exercise.reps},"weightIncrement":${exercise.weightIncrement},"startWeight":${exercise.startWeight},"muscleGroup":"${exercise.muscleGroup||""}","note":"tip or null"}`;
   const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),7000);
-  const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:400,system,messages:[{role:"user",content:msg}]}),signal:ctrl.signal});
-  if(!res.ok)throw new Error();
+  const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:getAIHeaders(),body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:400,system,messages:[{role:"user",content:msg}]}),signal:ctrl.signal});
+  if(!res.ok)throw new Error(`HTTP ${res.status}`);
   const data=await res.json();
   return JSON.parse((data.content||[]).map(b=>b.text||"").join("").replace(/```json|```/g,"").trim());
 }
@@ -213,7 +243,7 @@ function fallbackRemix(exercise,otherNames,dayId,focus){
 function exportCSV(exerciseHistory){
   const rows=["Date,Exercise,Station,Sets Logged,Sets Total,Avg Reps,Target Reps,Weight (kg),Day Type"];
   Object.entries(exerciseHistory||{}).forEach(([exId,entries])=>{
-    const name=SEED_NAMES[exId]||exId.replace(/_/g," ");
+    const name=EXERCISE_NAME_MAP[exId]||exId.replace(/_/g," ");
     (entries||[]).forEach(e=>{
       rows.push(`${e.date},"${name}","#${e.equipNum||"?"}",${e.setsLogged||""},${e.totalSets||""},${e.avgReps!=null?e.avgReps.toFixed(1):""},${e.targetReps||""},${e.weight||""},${e.dayId||""}`);
     });
@@ -322,6 +352,192 @@ function RepPicker({target,value,onChange,rating,onRate,onClose}){
   );
 }
 
+// ─── CSV Import ───────────────────────────────────────────────────────────────
+function importCSVFile(file,appState,persistFn,onDone){
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const lines=e.target.result.split('\n');
+      const rows=lines.slice(1).filter(l=>l.trim());
+      const newExHist={};const latestWeights={};
+      const reverseMap={};
+      Object.entries(EXERCISE_NAME_MAP).forEach(([id,n])=>{reverseMap[n.toLowerCase()]=id;});
+      rows.forEach(row=>{
+        const parts=[];let inQ=false,cur="";
+        for(const ch of row){if(ch==='"'){inQ=!inQ;}else if(ch===','&&!inQ){parts.push(cur.trim());cur="";}else{cur+=ch;}}
+        parts.push(cur.trim());
+        const[date,exName,,setsLogged,totalSets,avgReps,targetReps,weight,dayId]=parts;
+        if(!date||!exName)return;
+        const clean=exName.replace(/^"|"$/g,"");
+        const exId=reverseMap[clean.toLowerCase()]||clean.toLowerCase().replace(/\s+/g,"_");
+        if(!newExHist[exId])newExHist[exId]=[];
+        const entry={date,weight:parseFloat(weight)||0,avgReps:parseFloat(avgReps)||null,targetReps:parseInt(targetReps)||12,setsLogged:parseInt(setsLogged)||0,totalSets:parseInt(totalSets)||0,dayId:dayId||"A"};
+        newExHist[exId].push(entry);
+        if(!latestWeights[exId]||new Date(date)>=new Date(latestWeights[exId].date))latestWeights[exId]=entry;
+      });
+      const newWeights={...appState.weights};
+      Object.entries(latestWeights).forEach(([exId,entry])=>{
+        newWeights[exId]={weight:entry.weight,lastWeight:entry.weight,lastAvgReps:entry.avgReps,lastTargetReps:entry.targetReps,weightIncrement:newWeights[exId]?.weightIncrement||2.5,lastCompleted:entry.setsLogged===entry.totalSets};
+      });
+      persistFn({...appState,exerciseHistory:newExHist,weights:newWeights});
+      onDone(Object.keys(newExHist).length,rows.length,null);
+    }catch(err){onDone(0,0,err.message);}
+  };
+  reader.readAsText(file);
+}
+
+// ─── Confirm Modal ────────────────────────────────────────────────────────────
+function ConfirmModal({message,subtext,confirmLabel="Confirm",cancelLabel="Cancel",confirmColor="#e31837",onConfirm,onCancel}){
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 24px"}} onClick={onCancel}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:20,padding:"28px 24px",width:"100%",maxWidth:320,animation:"popIn 0.2s ease",textAlign:"center"}}>
+        <div style={{fontSize:"0.9rem",color:"#f0f0f0",fontWeight:600,marginBottom:subtext?8:20,lineHeight:1.5}}>{message}</div>
+        {subtext&&<div style={{fontSize:"0.72rem",color:"#666",marginBottom:20,lineHeight:1.5}}>{subtext}</div>}
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={onCancel} style={{flex:1,height:44,borderRadius:12,border:"1px solid #2a2a2a",background:"#111",color:"#888",cursor:"pointer",fontSize:"0.85rem",fontWeight:600}}>{cancelLabel}</button>
+          <button onClick={onConfirm} style={{flex:1,height:44,borderRadius:12,border:"none",background:confirmColor,color:"#fff",cursor:"pointer",fontFamily:"Bebas Neue",fontSize:"1rem",letterSpacing:"0.08em"}}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Profile Setup ────────────────────────────────────────────────────────────
+const DEFAULT_PROFILE={age:"",gender:"",goal:"both",workoutsPerCycle:3};
+function ProfileSetup({onSave,onSkip=null}){
+  const[p,setP]=useState({...DEFAULT_PROFILE});
+  const canSave=p.age&&p.gender&&p.goal;
+  const goals=[{key:"build_muscle",label:"Build Muscle",emoji:"💪"},{key:"lose_weight",label:"Lose Weight",emoji:"🔥"},{key:"both",label:"Both",emoji:"⚡"},{key:"maintain",label:"Maintain",emoji:"🎯"}];
+  const genders=[{key:"male",label:"Male"},{key:"female",label:"Female"},{key:"other",label:"Other"}];
+  return(
+    <div style={{minHeight:"100vh",background:"#0e0e0e",fontFamily:"'DM Sans',sans-serif",color:"#f0f0f0",display:"flex",flexDirection:"column",animation:"fadeIn 0.5s ease"}}>
+      <style>{appStyle}</style>
+      <div style={{maxWidth:460,width:"100%",margin:"0 auto",padding:"40px 24px 60px",flex:1}}>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:24}}><SnapLogo height={34}/></div>
+        <div style={{fontFamily:"Bebas Neue",fontSize:"2.6rem",color:"#f0f0f0",letterSpacing:"0.05em",lineHeight:1,marginBottom:6}}>TELL US<br/><span style={{color:"#e31837"}}>ABOUT YOU</span></div>
+        <div style={{fontSize:"0.75rem",color:"#555",marginBottom:28,lineHeight:1.7}}>The AI uses this every session to personalise your workouts.</div>
+
+        {/* Age */}
+        <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:12,padding:"16px",marginBottom:12}}>
+          <div style={{fontSize:"0.65rem",color:"#4fc3f7",fontWeight:700,letterSpacing:"0.1em",marginBottom:10}}>🎂 YOUR AGE</div>
+          <input type="number" min={14} max={90} value={p.age} onChange={e=>setP(v=>({...v,age:e.target.value}))} placeholder="e.g. 35" style={{width:"100%",background:"#1a1a1a",border:`1px solid ${p.age?"#4fc3f7":"#2a2a2a"}`,borderRadius:8,padding:"12px 14px",color:"#f0f0f0",fontSize:"1.1rem",outline:"none"}}/>
+        </div>
+
+        {/* Gender */}
+        <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:12,padding:"16px",marginBottom:12}}>
+          <div style={{fontSize:"0.65rem",color:"#69f0ae",fontWeight:700,letterSpacing:"0.1em",marginBottom:10}}>👤 GENDER</div>
+          <div style={{display:"flex",gap:8}}>{genders.map(g=>{const a=p.gender===g.key;return(<button key={g.key} onClick={()=>setP(v=>({...v,gender:g.key}))} style={{flex:1,padding:"11px 8px",borderRadius:10,border:`1.5px solid ${a?"#69f0ae":"#252525"}`,background:a?"#0d1a10":"#161616",color:a?"#69f0ae":"#777",cursor:"pointer",fontSize:"0.8rem",fontWeight:600}}>{g.label}</button>);})}</div>
+        </div>
+
+        {/* Goal */}
+        <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:12,padding:"16px",marginBottom:12}}>
+          <div style={{fontSize:"0.65rem",color:"#e31837",fontWeight:700,letterSpacing:"0.1em",marginBottom:10}}>🎯 YOUR GOAL</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{goals.map(g=>{const a=p.goal===g.key;return(<button key={g.key} onClick={()=>setP(v=>({...v,goal:g.key}))} style={{padding:"12px 8px",borderRadius:10,border:`1.5px solid ${a?"#e31837":"#252525"}`,background:a?"#1a0a0d":"#161616",color:a?"#f0f0f0":"#777",cursor:"pointer",fontSize:"0.78rem",fontWeight:600,textAlign:"center"}}>{g.emoji} {g.label}</button>);})}</div>
+        </div>
+
+        {/* Workouts per cycle */}
+        <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:12,padding:"16px",marginBottom:28}}>
+          <div style={{fontSize:"0.65rem",color:"#ffd740",fontWeight:700,letterSpacing:"0.1em",marginBottom:4}}>📅 WEIGHT SESSIONS PER WEEK/CYCLE</div>
+          <div style={{fontSize:"0.65rem",color:"#444",marginBottom:14}}>How many weight workouts do you want per cycle?</div>
+          <div style={{display:"flex",gap:8,justifyContent:"center"}}>{[2,3,4,5].map(n=>{const a=p.workoutsPerCycle===n;return(<button key={n} onClick={()=>setP(v=>({...v,workoutsPerCycle:n}))} style={{flex:1,height:52,borderRadius:10,border:`1.5px solid ${a?"#ffd740":"#252525"}`,background:a?"#1a1800":"#161616",color:a?"#ffd740":"#777",cursor:"pointer",fontFamily:"Bebas Neue",fontSize:"1.5rem"}}>{n}</button>);})}</div>
+          <div style={{fontSize:"0.6rem",color:"#444",textAlign:"center",marginTop:8}}>({["A/B","A/B/C","A/B/C/B","A/B/C/A/B"][p.workoutsPerCycle-2]} rotation)</div>
+        </div>
+
+        <button onClick={()=>canSave&&onSave(p)} disabled={!canSave} style={{width:"100%",height:56,borderRadius:14,border:"none",cursor:canSave?"pointer":"not-allowed",fontFamily:"Bebas Neue",fontSize:"1.35rem",letterSpacing:"0.1em",background:canSave?"linear-gradient(135deg,#e31837,#ff4d6a)":"#222",color:canSave?"#fff":"#444",boxShadow:canSave?"0 4px 28px rgba(227,24,55,0.35)":"none",transition:"all 0.3s"}}>
+          {canSave?"NEXT — SET MY FOCUS →":"FILL IN YOUR DETAILS ABOVE"}
+        </button>
+        {onSkip&&<button onClick={onSkip} style={{width:"100%",marginTop:12,height:40,borderRadius:12,border:"1px solid #1e1e1e",background:"transparent",color:"#444",cursor:"pointer",fontSize:"0.72rem"}}>Skip for now</button>}
+      </div>
+    </div>
+  );
+}
+
+// ─── Gym Map View ─────────────────────────────────────────────────────────────
+function GymMapView(){
+  const[zoom,setZoom]=useState(1);
+  const[pan,setPan]=useState({x:0,y:0});
+  const[dragging,setDragging]=useState(false);
+  const lastPos=useRef(null);
+  const lastDist=useRef(null);
+  const containerRef=useRef(null);
+
+  function clampPan(z,px,py){
+    // Allow panning proportional to zoom level
+    const maxX=Math.max(0,(z-1)*300);const maxY=Math.max(0,(z-1)*200);
+    return{x:Math.max(-maxX,Math.min(maxX,px)),y:Math.max(-maxY,Math.min(maxY,py))};
+  }
+
+  function onPointerDown(e){
+    if(e.touches&&e.touches.length===2){
+      const dx=e.touches[0].clientX-e.touches[1].clientX;
+      const dy=e.touches[0].clientY-e.touches[1].clientY;
+      lastDist.current=Math.hypot(dx,dy);
+      return;
+    }
+    setDragging(true);
+    lastPos.current={x:e.clientX||e.touches?.[0]?.clientX||0,y:e.clientY||e.touches?.[0]?.clientY||0};
+    e.preventDefault();
+  }
+  function onPointerMove(e){
+    if(e.touches&&e.touches.length===2&&lastDist.current!==null){
+      const dx=e.touches[0].clientX-e.touches[1].clientX;
+      const dy=e.touches[0].clientY-e.touches[1].clientY;
+      const dist=Math.hypot(dx,dy);
+      const ratio=dist/lastDist.current;
+      setZoom(z=>{const nz=Math.max(1,Math.min(5,z*ratio));return nz;});
+      lastDist.current=dist;
+      e.preventDefault();
+      return;
+    }
+    if(!dragging||!lastPos.current)return;
+    const cx=e.clientX||e.touches?.[0]?.clientX||0;
+    const cy=e.clientY||e.touches?.[0]?.clientY||0;
+    const dx=cx-lastPos.current.x;const dy=cy-lastPos.current.y;
+    lastPos.current={x:cx,y:cy};
+    setPan(p=>{return clampPan(zoom,p.x+dx,p.y+dy);});
+    e.preventDefault();
+  }
+  function onPointerUp(){setDragging(false);lastPos.current=null;lastDist.current=null;}
+  function onWheel(e){
+    e.preventDefault();
+    setZoom(z=>Math.max(1,Math.min(5,z*(e.deltaY<0?1.1:0.9))));
+  }
+  function reset(){setZoom(1);setPan({x:0,y:0});}
+
+  return(
+    <div style={{paddingTop:16,paddingBottom:20,animation:"fadeIn 0.4s ease"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:12}}>
+        <div>
+          <div style={{fontFamily:"Bebas Neue",fontSize:"2.2rem",color:"#f0f0f0",letterSpacing:"0.05em",lineHeight:1}}>GYM MAP</div>
+          <div style={{fontSize:"0.68rem",color:"#555",marginTop:2}}>Snap Fitness Watagan Park · Pinch to zoom · Drag to pan</div>
+        </div>
+        {zoom>1&&<button onClick={reset} style={{background:"#1a1a1a",border:"1px solid #2a2a2a",color:"#888",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:"0.65rem"}}>↺ Reset</button>}
+      </div>
+      <div
+        ref={containerRef}
+        style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:14,overflow:"hidden",cursor:dragging?"grabbing":"grab",userSelect:"none",touchAction:"none",height:"calc(100vh - 220px)",maxHeight:500,display:"flex",alignItems:"center",justifyContent:"center"}}
+        onMouseDown={onPointerDown} onMouseMove={onPointerMove} onMouseUp={onPointerUp} onMouseLeave={onPointerUp}
+        onTouchStart={onPointerDown} onTouchMove={onPointerMove} onTouchEnd={onPointerUp}
+        onWheel={onWheel}
+      >
+        <img
+          src="gym-map.jpg"
+          alt="Snap Fitness Watagan Park floor map"
+          draggable={false}
+          style={{width:"100%",height:"100%",objectFit:"contain",transform:`scale(${zoom}) translate(${pan.x/zoom}px,${pan.y/zoom}px)`,transformOrigin:"center center",transition:dragging?"none":"transform 0.1s ease",willChange:"transform"}}
+          onError={e=>{e.target.style.display="none";e.target.nextSibling.style.display="flex";}}
+        />
+        <div style={{display:"none",flexDirection:"column",alignItems:"center",gap:12,padding:32,textAlign:"center"}}>
+          <div style={{fontSize:"2rem"}}>🗺️</div>
+          <div style={{fontFamily:"Bebas Neue",fontSize:"1.2rem",color:"#555",letterSpacing:"0.06em"}}>MAP NOT FOUND</div>
+          <div style={{fontSize:"0.72rem",color:"#444",lineHeight:1.6}}>Add <code style={{color:"#666",background:"#1a1a1a",padding:"2px 6px",borderRadius:4}}>gym-map.jpg</code> to your repo root to show the floor plan here.</div>
+        </div>
+      </div>
+      {zoom>1&&<div style={{textAlign:"center",marginTop:8,fontSize:"0.6rem",color:"#444"}}>{Math.round(zoom*100)}% zoom</div>}
+    </div>
+  );
+}
+
 // ─── Setup Gate ───────────────────────────────────────────────────────────────
 function SetupGate({onBegin}){
   return(<div style={{minHeight:"100vh",background:"#0e0e0e",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px",animation:"fadeIn 0.5s ease"}}>
@@ -332,6 +548,71 @@ function SetupGate({onBegin}){
       <button onClick={onBegin} style={{width:"100%",height:56,borderRadius:14,border:"none",cursor:"pointer",fontFamily:"Bebas Neue",fontSize:"1.35rem",letterSpacing:"0.1em",background:"linear-gradient(135deg,#e31837,#ff4d6a)",color:"#fff",boxShadow:"0 4px 28px rgba(227,24,55,0.35)"}}>SET UP MY FOCUS →</button>
     </div>
   </div>);
+}
+
+// ─── AI Key Card (used inside FocusView) ─────────────────────────────────────
+function AIKeyCard(){
+  const[key,setKey]=useState(()=>localStorage.getItem("snapfit_apikey")||"");
+  const[showInput,setShowInput]=useState(false);
+  const[draft,setDraft]=useState("");
+  const[saved,setSaved]=useState(false);
+  const hasKey=!!key;
+
+  function saveKey(){
+    const k=draft.trim();
+    if(!k)return;
+    localStorage.setItem("snapfit_apikey",k);
+    setKey(k);setDraft("");setShowInput(false);setSaved(true);
+    setTimeout(()=>setSaved(false),2000);
+  }
+  function removeKey(){
+    localStorage.removeItem("snapfit_apikey");
+    setKey("");setShowInput(false);
+  }
+
+  return(
+    <div style={{background:"#111",border:`1.5px solid ${hasKey?"#69f0ae33":"#1e1e1e"}`,borderRadius:12,padding:"16px",marginBottom:14}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:hasKey?0:12}}>
+        <div>
+          <div style={{fontSize:"0.65rem",color:hasKey?"#69f0ae":"#888",fontWeight:700,letterSpacing:"0.1em",marginBottom:2}}>🤖 AI WORKOUTS — {hasKey?"ON ✓":"OFF"}</div>
+          <div style={{fontSize:"0.68rem",color:"#666"}}>{hasKey?"Claude AI is generating your workouts":"Using smart built-in plans"}</div>
+        </div>
+        {hasKey&&!showInput&&(
+          <div style={{display:"flex",gap:6}}>
+            <button onClick={()=>{setShowInput(true);setDraft("");}} style={{background:"#1a1a1a",border:"1px solid #2a2a2a",color:"#666",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:"0.62rem"}}>Change</button>
+            <button onClick={removeKey} style={{background:"transparent",border:"1px solid #2a1010",color:"#ff6b6b",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:"0.62rem"}}>Remove</button>
+          </div>
+        )}
+        {!hasKey&&!showInput&&(
+          <button onClick={()=>setShowInput(true)} style={{background:"linear-gradient(135deg,#e31837,#ff4d6a)",border:"none",color:"#fff",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:"0.7rem",fontWeight:700,whiteSpace:"nowrap"}}>Enable AI →</button>
+        )}
+      </div>
+      {saved&&<div style={{fontSize:"0.65rem",color:"#69f0ae",marginTop:8,fontWeight:600}}>✓ AI key saved — next workout will use Claude AI</div>}
+      {showInput&&(<div style={{marginTop:12}}>
+        <div style={{fontSize:"0.62rem",color:"#ffd740",fontWeight:700,letterSpacing:"0.08em",marginBottom:10}}>📋 HOW TO GET A FREE API KEY</div>
+        <div style={{background:"#161616",borderRadius:10,padding:"12px 14px",marginBottom:12,fontSize:"0.68rem",color:"#888",lineHeight:1.9}}>
+          <div><span style={{color:"#e31837",fontWeight:700}}>1.</span> Go to <span style={{color:"#4fc3f7",fontWeight:600}}>console.anthropic.com</span></div>
+          <div><span style={{color:"#e31837",fontWeight:700}}>2.</span> Create a free account <span style={{color:"#555"}}>(get $5 free credit)</span></div>
+          <div><span style={{color:"#e31837",fontWeight:700}}>3.</span> Click <span style={{color:"#f0f0f0",fontWeight:600}}>"API Keys"</span> in the left menu</div>
+          <div><span style={{color:"#e31837",fontWeight:700}}>4.</span> Click <span style={{color:"#f0f0f0",fontWeight:600}}>"Create Key"</span>, give it any name</div>
+          <div><span style={{color:"#e31837",fontWeight:700}}>5.</span> Copy the key <span style={{color:"#555"}}>(starts with sk-ant-...)</span></div>
+          <div><span style={{color:"#e31837",fontWeight:700}}>6.</span> Paste it below and tap Save</div>
+        </div>
+        <div style={{fontSize:"0.58rem",color:"#444",marginBottom:8}}>Each AI workout costs ~$0.002. $5 free credit = ~2,500 workouts.</div>
+        <input
+          type="password"
+          value={draft}
+          onChange={e=>setDraft(e.target.value)}
+          placeholder="sk-ant-..."
+          style={{width:"100%",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:8,padding:"11px 12px",color:"#ccc",fontSize:"0.8rem",outline:"none",marginBottom:8,fontFamily:"monospace"}}
+        />
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>{setShowInput(false);setDraft("");}} style={{flex:1,height:40,borderRadius:10,border:"1px solid #2a2a2a",background:"#111",color:"#666",cursor:"pointer",fontSize:"0.8rem"}}>Cancel</button>
+          <button onClick={saveKey} disabled={!draft.trim()} style={{flex:2,height:40,borderRadius:10,border:"none",background:draft.trim()?"linear-gradient(135deg,#e31837,#ff4d6a)":"#222",color:draft.trim()?"#fff":"#444",cursor:draft.trim()?"pointer":"not-allowed",fontFamily:"Bebas Neue",fontSize:"0.95rem",letterSpacing:"0.08em"}}>SAVE KEY</button>
+        </div>
+      </div>)}
+    </div>
+  );
 }
 
 // ─── Focus View ───────────────────────────────────────────────────────────────
@@ -417,13 +698,59 @@ function FocusView({focus,onUpdate,onApply,onDurationChange,isFirstRun=false}){
         <div style={{width:44,height:26,borderRadius:13,background:active?"#ffd740":"#222",position:"relative",flexShrink:0,marginLeft:12,transition:"background 0.25s"}}><div style={{position:"absolute",top:3,left:active?20:3,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/></div>
       </div>);})}</div>
     </div>
-    <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:12,padding:"16px",marginBottom:20}}>
+    <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:12,padding:"16px",marginBottom:14}}>
       <div style={{fontSize:"0.65rem",color:"#4fc3f7",fontWeight:700,letterSpacing:"0.1em",marginBottom:8}}>📝 EXTRA NOTE FOR AI (optional)</div>
       <textarea value={local.customNote} onChange={e=>setLocal(p=>({...p,customNote:e.target.value}))} placeholder="e.g. left elbow sore, just did a long run..." maxLength={150} rows={2} style={{width:"100%",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:8,padding:"10px 12px",color:"#ccc",fontSize:"0.75rem",resize:"none",outline:"none",lineHeight:1.5}}/>
     </div>
+    {!isFirstRun&&<AIKeyCard/>}
     <button onClick={()=>{onUpdate(local);onApply(local);}} style={{width:"100%",height:52,borderRadius:14,border:"none",cursor:"pointer",fontFamily:"Bebas Neue",fontSize:"1.25rem",letterSpacing:"0.1em",background:isFirstRun||changed?"linear-gradient(135deg,#e31837,#ff4d6a)":"#252525",color:isFirstRun||changed?"#fff":"#444",transition:"all 0.3s",boxShadow:isFirstRun||changed?"0 4px 26px rgba(227,24,55,0.3)":"none"}}>
       {isFirstRun?"✓ SAVE & BUILD MY FIRST WORKOUT":changed?"✓ SAVE & REBUILD WORKOUT":"NO CHANGES"}
     </button>
+  </div>);
+}
+
+// ─── Weights View ─────────────────────────────────────────────────────────────
+function WeightsView({appState,persist,setHistModal}){
+  const[importStatus,setImportStatus]=useState(null);
+  const importRef=useRef(null);
+  return(<div style={{paddingTop:24,animation:"fadeIn 0.4s ease"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:4}}>
+      <div style={{fontFamily:"Bebas Neue",fontSize:"2.2rem",color:"#f0f0f0",letterSpacing:"0.05em"}}>YOUR WEIGHTS</div>
+      <div style={{display:"flex",gap:6,marginBottom:4}}>
+        <button onClick={()=>exportCSV(appState.exerciseHistory)} style={{background:"#1a1a1a",border:"1px solid #2a2a2a",color:"#888",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:"0.62rem",display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+          <span>📥</span><span>Export</span>
+        </button>
+        <button onClick={()=>importRef.current?.click()} style={{background:"#1a1a1a",border:"1px solid #2a2a2a",color:"#4fc3f7",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:"0.62rem",display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+          <span>📤</span><span>Import</span>
+        </button>
+        <input ref={importRef} type="file" accept=".csv" style={{display:"none"}} onChange={e=>{
+          const file=e.target.files?.[0];if(!file)return;
+          setImportStatus("Importing...");
+          importCSVFile(file,appState,persist,(exCount,rowCount,err)=>{
+            e.target.value="";
+            if(err)setImportStatus(`Error: ${err}`);
+            else setImportStatus(`✓ Imported ${exCount} exercises, ${rowCount} entries`);
+            setTimeout(()=>setImportStatus(null),4000);
+          });
+        }}/>
+      </div>
+    </div>
+    {importStatus&&<div style={{marginBottom:12,padding:"8px 12px",borderRadius:8,background:importStatus.startsWith("Error")?"#1a0808":"#081a10",border:`1px solid ${importStatus.startsWith("Error")?"#5c1818":"#1a4028"}`,fontSize:"0.68rem",color:importStatus.startsWith("Error")?"#ff6b6b":"#69f0ae"}}>{importStatus}</div>}
+    <div style={{fontSize:"0.72rem",color:"#666",marginBottom:16}}>Tap any exercise to see history · Export CSV to back up · Import to restore</div>
+    {Object.keys(appState.weights).length===0&&(<div style={{textAlign:"center",padding:"40px 20px",color:"#3a3a3a",fontSize:"0.82rem"}}>No weight data yet — complete your first session to start tracking.</div>)}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:24}}>
+      {Object.entries(appState.weights).map(([id,w])=>{
+        const dec=w.lastAvgReps?getWeightDecision(w.lastAvgReps,w.lastTargetReps,w.weightIncrement||2.5):null;
+        const name=EXERCISE_NAME_MAP[id]||id.replace(/_/g," ");
+        const hc=(appState.exerciseHistory?.[id]||[]).length;
+        return(<div key={id} onClick={()=>setHistModal({id,name})} style={{background:"#161616",border:"1px solid #222",borderRadius:12,padding:"14px",cursor:"pointer",position:"relative",transition:"border-color 0.2s"}} onMouseEnter={e=>e.currentTarget.style.borderColor="#333"} onMouseLeave={e=>e.currentTarget.style.borderColor="#222"}>
+          <div style={{fontSize:"0.62rem",color:"#666",marginBottom:4,lineHeight:1.3}}>{name}</div>
+          <div style={{display:"flex",alignItems:"baseline",gap:4,marginBottom:4}}><span style={{fontFamily:"Bebas Neue",fontSize:"2rem",color:"#f0f0f0",lineHeight:1}}>{w.weight}</span><span style={{fontSize:"0.65rem",color:"#555"}}>kg</span>{dec&&<span style={{fontSize:"0.8rem",color:dec.color,marginLeft:4}}>{dec.action==="increase"?"↑":dec.action==="decrease"?"↓":"→"}</span>}</div>
+          {w.lastAvgReps?<div style={{fontSize:"0.58rem",color:"#555"}}>{Number(w.lastAvgReps).toFixed(1)} / {w.lastTargetReps} reps last</div>:<div style={{fontSize:"0.58rem",color:"#444"}}>× {w.lastTargetReps||"?"} reps</div>}
+          <div style={{position:"absolute",top:8,right:10,fontSize:"0.52rem",color:hc>0?"#444":"#2a2a2a"}}>{hc>0?`${hc} sessions`:"tap for history"}</div>
+        </div>);
+      })}
+    </div>
   </div>);
 }
 
@@ -438,13 +765,15 @@ function App(){
   const[sessionRatings,setSessionRatings]=useState({});
   const[sessionSetWeights,setSessionSetWeights]=useState({});
   const[done,setDone]=useState(false);
-  const[summary,setSummary]=useState(null); // post-workout summary
+  const[summary,setSummary]=useState(null);
   const[loaded,setLoaded]=useState(false);
   const[repPicker,setRepPicker]=useState(null);
   const[remixingId,setRemixingId]=useState(null);
   const[restTimer,setRestTimer]=useState(null);
   const[histModal,setHistModal]=useState(null);
   const[showDayPicker,setShowDayPicker]=useState(false);
+  const[confirmModal,setConfirmModal]=useState(null); // {message,subtext,confirmLabel,onConfirm}
+  const[showProfileSetup,setShowProfileSetup]=useState(false);
   const restRef=useRef(null);
   const hasGenerated=useRef(false);
 
@@ -459,10 +788,27 @@ function App(){
   function startRest(ex,hasNext){if(!hasNext)return;clearInterval(restRef.current);const s=getRestSecs(ex);setRestTimer({exId:ex.id,exName:ex.name,remaining:s,total:s});}
   function skipRest(){clearInterval(restRef.current);setRestTimer(null);}
 
-  // load storage
+  // load storage (with v10→v11 migration)
   useEffect(()=>{
     try{
-      const saved=localStorage.getItem(STORAGE_KEY);
+      let saved=localStorage.getItem(STORAGE_KEY);
+      // Migrate from v10 if v11 doesn't exist yet
+      if(!saved){
+        const old=localStorage.getItem(OLD_STORAGE_KEY);
+        if(old){
+          const p=JSON.parse(old);
+          // Preserve all existing data, add new fields
+          p.profile=p.profile||{...DEFAULT_PROFILE};
+          p.profileConfigured=p.profileConfigured||false;
+          if(!p.focus)p.focus={...DEFAULT_FOCUS};
+          if(p.focus.skipAnkle===undefined)p.focus.skipAnkle=false;
+          if(p.focus.workoutDuration===undefined)p.focus.workoutDuration=45;
+          if(!p.exerciseHistory)p.exerciseHistory={};
+          localStorage.setItem(STORAGE_KEY,JSON.stringify(p));
+          localStorage.removeItem(OLD_STORAGE_KEY);
+          saved=JSON.stringify(p);
+        }
+      }
       if(saved){
         const p=JSON.parse(saved);
         if(!p.focus)p.focus={...DEFAULT_FOCUS};
@@ -470,11 +816,14 @@ function App(){
         if(p.focus.workoutDuration===undefined)p.focus.workoutDuration=45;
         if(p.focusConfigured===undefined)p.focusConfigured=false;
         if(!p.exerciseHistory)p.exerciseHistory={};
+        if(!p.profile)p.profile={...DEFAULT_PROFILE};
+        if(p.profileConfigured===undefined)p.profileConfigured=false;
         setAppState(p);
       }else{
-        setAppState({cycleIdx:0,sessions:0,weights:SEED_WEIGHTS,history:[],exerciseHistory:{},seeded:true,focus:{...DEFAULT_FOCUS},focusConfigured:false});
+        // Brand new user — empty weights, requires profile setup
+        setAppState({cycleIdx:0,sessions:0,weights:{},history:[],exerciseHistory:{},focus:{...DEFAULT_FOCUS},focusConfigured:false,profile:{...DEFAULT_PROFILE},profileConfigured:false});
       }
-    }catch{setAppState({cycleIdx:0,sessions:0,weights:SEED_WEIGHTS,history:[],exerciseHistory:{},seeded:true,focus:{...DEFAULT_FOCUS},focusConfigured:false});}
+    }catch{setAppState({cycleIdx:0,sessions:0,weights:{},history:[],exerciseHistory:{},focus:{...DEFAULT_FOCUS},focusConfigured:false,profile:{...DEFAULT_PROFILE},profileConfigured:false});}
     setLoaded(true);
   },[]);
 
@@ -489,13 +838,15 @@ function App(){
 
   async function kickoff(state,overrideDayIdx=null){
     setGenerating(true);setDone(false);setWorkout(null);setSummary(null);
-    const idx=overrideDayIdx!==null?overrideDayIdx:(state.cycleIdx%3);
-    const dayType=DAY_TYPES[idx];
+    const profile=state.profile||DEFAULT_PROFILE;
+    const seq=getDaySeq(profile);
+    const idx=overrideDayIdx!==null?overrideDayIdx:(state.cycleIdx%seq.length);
+    const dayType=DAY_TYPES.find(d=>d.id===seq[idx%seq.length])||DAY_TYPES[0];
     const recentIds=state.history.slice(0,3).flatMap(h=>h.exerciseIds||[]);
     const perfNotes=buildPerfNotes(state.history,state.weights);
     const focus=state.focus||DEFAULT_FOCUS;
     let w;
-    try{w=await tryAIWorkout(dayType,state.sessions+1,recentIds,perfNotes,state.weights,focus);}
+    try{w=await tryAIWorkout(dayType,state.sessions+1,recentIds,perfNotes,state.weights,focus,profile);}
     catch{w=getFallback(dayType.id,state.sessions,recentIds,focus);}
     // STORE dayIdx on workout so finish knows which day we actually did
     setWorkout({...w,dayType,dayIdx:idx});
@@ -515,7 +866,8 @@ function App(){
     const ex=workout.exercises.find(e=>e.id===exId);
     const others=workout.exercises.filter(e=>e.id!==exId).map(e=>e.name);
     const focus=appState.focus||DEFAULT_FOCUS;
-    let newEx;try{newEx=await tryAIRemix(ex,others,workout.dayType,appState.weights,focus);}catch{newEx=fallbackRemix(ex,others,workout.dayType.id,focus);}
+    const profile=appState.profile||DEFAULT_PROFILE;
+    let newEx;try{newEx=await tryAIRemix(ex,others,workout.dayType,appState.weights,focus,profile);}catch{newEx=fallbackRemix(ex,others,workout.dayType.id,focus);}
     setWorkout(prev=>({...prev,exercises:prev.exercises.map(e=>e.id===exId?newEx:e)}));
     setSessionSets(prev=>({...prev,[newEx.id]:Array(newEx.sets).fill(null)}));
     setSessionRatings(prev=>({...prev,[newEx.id]:Array(newEx.sets).fill(null)}));
@@ -567,16 +919,35 @@ function App(){
 
     const entry={date:new Date().toLocaleDateString("en-AU"),time:new Date().toLocaleTimeString("en-AU",{hour:"2-digit",minute:"2-digit"}),dayId:workout.dayType.id,dayName:workout.dayType.name,sessionTitle:workout.sessionTitle,exerciseIds:workout.exercises.map(e=>e.id),weights:{...sessionWeights},repData:Object.fromEntries(workout.exercises.map(ex=>[ex.id,sessionSets[ex.id]])),ratingData:Object.fromEntries(workout.exercises.map(ex=>[ex.id,sessionRatings[ex.id]])),wasAI:!workout.isFallback,focusSnapshot:{...(appState.focus||DEFAULT_FOCUS)}};
 
-    // FIX: advance cycle from the day we ACTUALLY did (workout.dayIdx), not stale appState.cycleIdx
-    const nextCycleIdx=((workout.dayIdx!==undefined?workout.dayIdx:appState.cycleIdx)+1)%3;
+    // Advance cycle from the day we ACTUALLY did, using the correct sequence length
+    const profile=appState.profile||DEFAULT_PROFILE;
+    const seq=getDaySeq(profile);
+    const nextCycleIdx=((workout.dayIdx!==undefined?workout.dayIdx:appState.cycleIdx)+1)%seq.length;
+    const nextDayType=DAY_TYPES.find(d=>d.id===seq[nextCycleIdx])||DAY_TYPES[0];
     const ns={...appState,cycleIdx:nextCycleIdx,sessions:appState.sessions+1,weights:newW,exerciseHistory:newExHist,history:[entry,...appState.history].slice(0,40)};
     persist(ns);
 
-    setSummary({rows:summaryRows,dayType:workout.dayType,sessionNum:appState.sessions+1,nextDayType:DAY_TYPES[nextCycleIdx]});
+    setSummary({rows:summaryRows,dayType:workout.dayType,sessionNum:appState.sessions+1,nextDayType});
     setDone(true);
   }
 
   if(!loaded||!appState)return(<div style={{minHeight:"100vh",background:"#0e0e0e",display:"flex",alignItems:"center",justifyContent:"center"}}><style>{appStyle}</style><div style={{width:40,height:40,border:"3px solid #222",borderTopColor:"#e31837",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/></div>);
+
+  // Profile setup gate — shown first for brand-new users or if manually triggered
+  if(!appState.profileConfigured||showProfileSetup){
+    const isExisting=appState.sessions>0;
+    return(<ProfileSetup
+      onSave={(prof)=>{
+        persist({...appState,profile:prof,profileConfigured:true});
+        setShowProfileSetup(false);
+        if(!appState.focusConfigured)setView("focusSetup");
+      }}
+      onSkip={isExisting?()=>{
+        persist({...appState,profileConfigured:true});
+        setShowProfileSetup(false);
+      }:null}
+    />);
+  }
 
   if(!appState.focusConfigured){
     if(view==="focusSetup")return(<div style={{minHeight:"100vh",background:"#0e0e0e",fontFamily:"'DM Sans',sans-serif",color:"#f0f0f0"}}><style>{appStyle}</style><div style={{background:"#0e0e0e",borderBottom:"1px solid #1c1c1c",padding:"0 16px"}}><div style={{maxWidth:600,margin:"0 auto",height:56,display:"flex",alignItems:"center",gap:10}}><SnapLogo height={26}/><div style={{width:1,height:18,background:"#2a2a2a"}}/><div><div style={{fontFamily:"Bebas Neue",fontSize:"0.95rem",color:"#ccc",letterSpacing:"0.12em"}}>WATAGAN PARK</div><div style={{fontSize:"0.58rem",color:"#444",marginTop:2}}>First-time setup</div></div></div></div><div style={{maxWidth:600,margin:"0 auto",padding:"0 16px"}}><FocusView focus={appState.focus||DEFAULT_FOCUS} onUpdate={updateFocus} isFirstRun={true} onApply={(nf)=>{const ns=persist({...appState,focus:nf,focusConfigured:true});hasGenerated.current=false;setView("workout");kickoff(ns);}}/></div></div>);
@@ -584,7 +955,10 @@ function App(){
   }
 
   const focus=appState.focus||DEFAULT_FOCUS;
-  const dayType=workout?.dayType||DAY_TYPES[appState.cycleIdx%3];
+  const profile=appState.profile||DEFAULT_PROFILE;
+  const daySeq=getDaySeq(profile);
+  const aiOn=!!(localStorage.getItem("snapfit_apikey"));
+  const dayType=workout?.dayType||getDayTypeAtIdx(appState.cycleIdx,profile);
   const totalSets=workout?workout.exercises.reduce((s,ex)=>s+ex.sets,0):0;
   const completedSets=Object.values(sessionSets).flat().filter(r=>r!==null).length;
   const pct=totalSets>0?(completedSets/totalSets)*100:0;
@@ -595,7 +969,8 @@ function App(){
     <style>{appStyle}</style>
     {repPicker&&<RepPicker target={repPicker.target} value={repPicker.value} onChange={v=>setRepPicker(p=>({...p,value:v}))} rating={repPicker.rating||null} onRate={r=>setRepPicker(p=>({...p,rating:r}))} onClose={()=>logReps(repPicker.exId,repPicker.setIdx,repPicker.value,repPicker.rating||null)}/>}
     {histModal&&<ExerciseHistoryModal exId={histModal.id} exName={histModal.name} history={appState.exerciseHistory||{}} onClose={()=>setHistModal(null)}/>}
-    {showDayPicker&&<DayPickerModal currentIdx={appState.cycleIdx%3} onPick={(i)=>{hasGenerated.current=true;kickoff(appState,i);}} onClose={()=>setShowDayPicker(false)}/>}
+    {showDayPicker&&<DayPickerModal currentIdx={appState.cycleIdx%daySeq.length} onPick={(i)=>{hasGenerated.current=true;kickoff(appState,i);}} onClose={()=>setShowDayPicker(false)}/>}
+    {confirmModal&&<ConfirmModal message={confirmModal.message} subtext={confirmModal.subtext} confirmLabel={confirmModal.confirmLabel||"Confirm"} confirmColor={confirmModal.confirmColor||"#e31837"} onConfirm={()=>{confirmModal.onConfirm();setConfirmModal(null);}} onCancel={()=>setConfirmModal(null)}/>}
 
     {/* HEADER */}
     <div style={{background:"#0e0e0e",position:"sticky",top:0,zIndex:100,borderBottom:"1px solid #1c1c1c"}}>
@@ -603,12 +978,16 @@ function App(){
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px 8px"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <SnapLogo height={26}/><div style={{width:1,height:20,background:"#2a2a2a",flexShrink:0}}/>
-            <div><div style={{fontFamily:"Bebas Neue",fontSize:"0.95rem",color:"#ccc",letterSpacing:"0.12em",lineHeight:1}}>WATAGAN PARK</div><div style={{fontSize:"0.58rem",color:"#444",marginTop:2}}>Session #{appState.sessions+1} · Cycle {Math.floor(appState.sessions/3)+1}</div></div>
+            <div><div style={{fontFamily:"Bebas Neue",fontSize:"0.95rem",color:"#ccc",letterSpacing:"0.12em",lineHeight:1}}>WATAGAN PARK</div><div style={{fontSize:"0.58rem",color:"#444",marginTop:2}}>Session #{appState.sessions+1} · Cycle {Math.floor(appState.sessions/daySeq.length)+1}</div></div>
           </div>
-          {activeBadges.length>0&&(<div style={{display:"flex",gap:4,flexWrap:"nowrap",overflow:"hidden",maxWidth:180}}>{activeBadges.slice(0,3).map((b,i)=>(<span key={i} onClick={()=>setView("focus")} style={{fontSize:"0.55rem",fontWeight:700,color:b.color,background:`${b.color}15`,border:`1px solid ${b.color}40`,padding:"2px 6px",borderRadius:20,whiteSpace:"nowrap",cursor:"pointer",flexShrink:0}}>{b.label}</span>))}{activeBadges.length>3&&<span style={{fontSize:"0.55rem",color:"#555",padding:"2px 4px",flexShrink:0}}>+{activeBadges.length-3}</span>}</div>)}
+          <div style={{display:"flex",gap:4,flexWrap:"nowrap",overflow:"hidden",maxWidth:200,alignItems:"center"}}>
+            <span onClick={()=>setView("focus")} style={{fontSize:"0.52rem",fontWeight:700,color:aiOn?"#69f0ae":"#444",background:aiOn?"#0d1a1033":"#1a1a1a",border:`1px solid ${aiOn?"#69f0ae44":"#2a2a2a"}`,padding:"2px 6px",borderRadius:20,whiteSpace:"nowrap",cursor:"pointer",flexShrink:0}}>{aiOn?"🤖 AI ON":"📋 Smart Plan"}</span>
+            {activeBadges.slice(0,2).map((b,i)=>(<span key={i} onClick={()=>setView("focus")} style={{fontSize:"0.52rem",fontWeight:700,color:b.color,background:`${b.color}15`,border:`1px solid ${b.color}40`,padding:"2px 6px",borderRadius:20,whiteSpace:"nowrap",cursor:"pointer",flexShrink:0}}>{b.label}</span>))}
+            {activeBadges.length>2&&<span style={{fontSize:"0.52rem",color:"#555",padding:"2px 4px",flexShrink:0}}>+{activeBadges.length-2}</span>}
+          </div>
         </div>
         <div style={{display:"flex",borderTop:"1px solid #1a1a1a"}}>
-          {[{v:"workout",label:"Today",icon:"⚡"},{v:"history",label:"Log",icon:"📋"},{v:"weights",label:"Weights",icon:"🏋️"},{v:"focus",label:"Focus",icon:"🎯",hasBadge:activeBadges.length>0}].map(({v,label,icon,hasBadge})=>{const active=view===v;return(<button key={v} onClick={()=>setView(v)} style={{flex:1,border:"none",background:"transparent",cursor:"pointer",padding:"8px 4px 10px",position:"relative",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}><div style={{position:"absolute",top:0,left:"20%",right:"20%",height:2,borderRadius:"0 0 2px 2px",background:active?"#e31837":"transparent"}}/><span style={{fontSize:"0.85rem",lineHeight:1,opacity:active?1:0.4}}>{icon}</span><span style={{fontSize:"0.6rem",fontWeight:active?700:500,color:active?"#f0f0f0":"#555",letterSpacing:"0.04em"}}>{label.toUpperCase()}</span>{hasBadge&&!active&&<div style={{position:"absolute",top:6,right:"28%",width:5,height:5,borderRadius:"50%",background:"#e31837"}}/>}</button>);})}
+          {[{v:"workout",label:"Today",icon:"⚡"},{v:"history",label:"Log",icon:"📋"},{v:"weights",label:"Weights",icon:"🏋️"},{v:"map",label:"Map",icon:"🗺️"},{v:"focus",label:"Focus",icon:"🎯",hasBadge:activeBadges.length>0}].map(({v,label,icon,hasBadge})=>{const active=view===v;return(<button key={v} onClick={()=>setView(v)} style={{flex:1,border:"none",background:"transparent",cursor:"pointer",padding:"8px 2px 10px",position:"relative",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}><div style={{position:"absolute",top:0,left:"15%",right:"15%",height:2,borderRadius:"0 0 2px 2px",background:active?"#e31837":"transparent"}}/><span style={{fontSize:"0.8rem",lineHeight:1,opacity:active?1:0.4}}>{icon}</span><span style={{fontSize:"0.55rem",fontWeight:active?700:500,color:active?"#f0f0f0":"#555",letterSpacing:"0.03em"}}>{label.toUpperCase()}</span>{hasBadge&&!active&&<div style={{position:"absolute",top:6,right:"20%",width:5,height:5,borderRadius:"50%",background:"#e31837"}}/>}</button>);})}
         </div>
       </div>
     </div>
@@ -692,8 +1071,8 @@ function App(){
         {workout&&!generating&&(<div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:50}}>
           {restTimer&&restTimer.remaining>0&&(()=>{const p=(restTimer.remaining/restTimer.total)*100;const urgent=restTimer.remaining<=10;const tc=urgent?"#ff6b6b":restTimer.remaining<=30?"#ffd740":"#69f0ae";const mins=Math.floor(restTimer.remaining/60);const secs=restTimer.remaining%60;const ts=mins>0?`${mins}:${secs.toString().padStart(2,"0")}`:`${secs}s`;return(<div style={{background:"#111",borderTop:`2px solid ${tc}`,padding:"10px 16px 6px"}}><div style={{maxWidth:600,margin:"0 auto"}}><div style={{height:3,background:"#1e1e1e",borderRadius:2,overflow:"hidden",marginBottom:8}}><div style={{height:"100%",width:`${p}%`,background:tc,borderRadius:2,transition:"width 1s linear"}}/></div><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{flex:1}}><div style={{fontSize:"0.58rem",color:"#555",fontWeight:700,letterSpacing:"0.08em",marginBottom:1}}>REST TIMER</div><div style={{fontSize:"0.65rem",color:"#777"}}>Next: {restTimer.exName}</div></div><div style={{fontFamily:"Bebas Neue",fontSize:"2.2rem",color:tc,lineHeight:1,animation:urgent?"pulse 0.6s infinite":"none",minWidth:54,textAlign:"center"}}>{ts}</div><button onClick={skipRest} style={{background:"#1e1e1e",border:`1px solid ${tc}55`,color:tc,borderRadius:10,padding:"8px 14px",cursor:"pointer",fontFamily:"Bebas Neue",fontSize:"0.85rem",whiteSpace:"nowrap"}}>SKIP →</button></div></div></div>);})()}
           <div style={{padding:"10px 16px 22px",background:"linear-gradient(transparent,#0e0e0e 35%)"}}><div style={{maxWidth:600,margin:"0 auto",display:"flex",gap:8}}>
-            {!allComplete&&completedSets>0&&(<button onClick={()=>{if(confirm(`Only ${completedSets}/${totalSets} sets logged — finish early?`))finishWorkout();}} style={{flex:"0 0 auto",height:52,padding:"0 16px",borderRadius:14,border:"1px solid #333",cursor:"pointer",fontFamily:"Bebas Neue",fontSize:"0.85rem",background:"#1a1a1a",color:"#888",lineHeight:1.2}}>FINISH<br/>EARLY</button>)}
-            <button onClick={()=>{if(allComplete)finishWorkout();else if(completedSets===0){if(confirm("No sets logged — still finish?"))finishWorkout();}}} disabled={!allComplete&&completedSets===0} style={{flex:1,height:52,borderRadius:14,border:"none",cursor:allComplete?"pointer":completedSets===0?"not-allowed":"pointer",fontFamily:"Bebas Neue",fontSize:"1.1rem",letterSpacing:"0.08em",transition:"all 0.3s",background:allComplete?"linear-gradient(135deg,#e31837,#ff4d6a)":"#161616",color:allComplete?"#fff":"#333",boxShadow:allComplete?"0 4px 26px rgba(227,24,55,0.35)":"none",animation:allComplete?"pulse 2s infinite":"none"}}>
+            {!allComplete&&completedSets>0&&(<button onClick={()=>setConfirmModal({message:`Finish early?`,subtext:`Only ${completedSets}/${totalSets} sets logged.`,confirmLabel:"FINISH EARLY",onConfirm:finishWorkout})} style={{flex:"0 0 auto",height:52,padding:"0 16px",borderRadius:14,border:"1px solid #333",cursor:"pointer",fontFamily:"Bebas Neue",fontSize:"0.85rem",background:"#1a1a1a",color:"#888",lineHeight:1.2}}>FINISH<br/>EARLY</button>)}
+            <button onClick={()=>{if(allComplete)finishWorkout();else if(completedSets===0)setConfirmModal({message:"No sets logged yet",subtext:"Finish session without logging anything?",confirmLabel:"FINISH ANYWAY",onConfirm:finishWorkout});}} disabled={!allComplete&&completedSets===0} style={{flex:1,height:52,borderRadius:14,border:"none",cursor:allComplete?"pointer":completedSets===0?"not-allowed":"pointer",fontFamily:"Bebas Neue",fontSize:"1.1rem",letterSpacing:"0.08em",transition:"all 0.3s",background:allComplete?"linear-gradient(135deg,#e31837,#ff4d6a)":"#161616",color:allComplete?"#fff":"#333",boxShadow:allComplete?"0 4px 26px rgba(227,24,55,0.35)":"none",animation:allComplete?"pulse 2s infinite":"none"}}>
               {allComplete?"✓ COMPLETE SESSION":`${totalSets-completedSets} SETS REMAINING`}
             </button>
           </div></div>
@@ -754,52 +1133,69 @@ function App(){
         <div style={{fontSize:"0.72rem",color:"#666",marginBottom:20}}>{appState.sessions} session{appState.sessions!==1?"s":""} · No fixed schedule</div>
         <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:12,padding:"14px",marginBottom:20}}>
           <div style={{fontSize:"0.62rem",color:"#e31837",fontWeight:700,letterSpacing:"0.1em",marginBottom:10}}>CYCLE POSITION</div>
-          <div style={{display:"flex",gap:8}}>{DAY_TYPES.map((d,i)=>{const isNext=i===(appState.cycleIdx%3);return(<div key={d.id} style={{flex:1,background:isNext?"#1a0a0d":"#161616",border:`1.5px solid ${isNext?d.color:"#222"}`,borderRadius:10,padding:"10px 6px",textAlign:"center"}}><div style={{fontFamily:"Bebas Neue",fontSize:"1.1rem",color:isNext?d.color:"#333",letterSpacing:"0.08em"}}>{d.label}</div><div style={{fontSize:"0.58rem",color:isNext?"#888":"#2a2a2a",marginTop:2,lineHeight:1.3}}>{d.name}</div>{isNext&&<div style={{fontSize:"0.56rem",color:d.color,fontWeight:700,marginTop:4}}>▶ NEXT</div>}</div>);})}</div>
+          <div style={{display:"flex",gap:8}}>{daySeq.map((dayId,i)=>{const d=DAY_TYPES.find(x=>x.id===dayId)||DAY_TYPES[0];const isNext=i===(appState.cycleIdx%daySeq.length);return(<div key={i} style={{flex:1,background:isNext?"#1a0a0d":"#161616",border:`1.5px solid ${isNext?d.color:"#222"}`,borderRadius:10,padding:"10px 6px",textAlign:"center"}}><div style={{fontFamily:"Bebas Neue",fontSize:"1rem",color:isNext?d.color:"#333",letterSpacing:"0.06em"}}>{d.label}</div><div style={{fontSize:"0.54rem",color:isNext?"#888":"#2a2a2a",marginTop:2,lineHeight:1.3}}>{d.name}</div>{isNext&&<div style={{fontSize:"0.56rem",color:d.color,fontWeight:700,marginTop:4}}>▶ NEXT</div>}</div>);})}</div>
         </div>
         {appState.history.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:"#3a3a3a",fontSize:"0.82rem"}}>No sessions yet.</div>}
         {appState.history.map((h,i)=>{const dt=DAY_TYPES.find(d=>d.id===h.dayId)||DAY_TYPES[0];return(<div key={i} style={{background:"#141414",border:"1px solid #1e1e1e",borderRadius:12,padding:"14px 15px",marginBottom:9}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}><div><div style={{display:"flex",alignItems:"center",gap:6}}><div style={{fontFamily:"Bebas Neue",fontSize:"1rem",color:"#f0f0f0",letterSpacing:"0.05em"}}>DAY {h.dayId} — {h.sessionTitle||h.dayName?.toUpperCase()}</div>{h.wasAI&&<span style={{fontSize:"0.55rem",color:"#555",background:"#1a1a1a",padding:"1px 5px",borderRadius:4}}>🤖</span>}</div><div style={{fontSize:"0.65rem",color:"#555"}}>{h.date} at {h.time}</div></div><div style={{background:dt.color,color:"#000",fontSize:"0.58rem",fontWeight:700,padding:"2px 8px",borderRadius:20}}>#{appState.sessions-i}</div></div>{h.repData&&(<div style={{display:"flex",flexWrap:"wrap",gap:5}}>{Object.entries(h.repData).map(([id,sets])=>{if(!sets||!sets.length)return null;const logged=sets.filter(r=>r!==null);const avg=logged.length?(logged.reduce((a,b)=>a+b,0)/logged.length).toFixed(1):"—";return<div key={id} style={{background:"#1a1a1a",borderRadius:5,padding:"2px 8px",fontSize:"0.6rem",color:"#777"}}>{id.replace(/_/g," ").split(" ")[0]} <span style={{color:"#e31837",fontWeight:700}}>{h.weights?.[id]??"-"}kg</span><span style={{color:"#555",marginLeft:3}}>{avg}r</span></div>;})}</div>)}</div>);})}
-        {appState.sessions>0&&(<div style={{marginTop:24,textAlign:"center",paddingBottom:20}}><button onClick={()=>{if(confirm("Reset session history? Weights are kept.")){persist({...appState,cycleIdx:0,sessions:0,history:[]});}}} style={{background:"transparent",border:"1px solid #222",color:"#3a3a3a",padding:"10px 22px",borderRadius:8,cursor:"pointer",fontSize:"0.7rem"}}>Reset Session History</button></div>)}
+        {appState.sessions>0&&(<div style={{marginTop:24,textAlign:"center",paddingBottom:20}}><button onClick={()=>setConfirmModal({message:"Reset session history?",subtext:"Your weights and exercise history are kept — only the session log is cleared.",confirmLabel:"RESET",confirmColor:"#ff6b6b",onConfirm:()=>persist({...appState,cycleIdx:0,sessions:0,history:[]})})} style={{background:"transparent",border:"1px solid #222",color:"#3a3a3a",padding:"10px 22px",borderRadius:8,cursor:"pointer",fontSize:"0.7rem"}}>Reset Session History</button></div>)}
       </div>)}
 
       {/* WEIGHTS VIEW */}
-      {view==="weights"&&(<div style={{paddingTop:24,animation:"fadeIn 0.4s ease"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:4}}>
-          <div style={{fontFamily:"Bebas Neue",fontSize:"2.2rem",color:"#f0f0f0",letterSpacing:"0.05em"}}>YOUR WEIGHTS</div>
-          <button onClick={()=>exportCSV(appState.exerciseHistory)} style={{background:"#1a1a1a",border:"1px solid #2a2a2a",color:"#888",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:"0.65rem",display:"flex",alignItems:"center",gap:5,marginBottom:4,flexShrink:0}}>
-            <span>📥</span><span>Export CSV</span>
-          </button>
-        </div>
-        <div style={{fontSize:"0.72rem",color:"#666",marginBottom:16}}>Tap any exercise to see its history · Updates after every session</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:24}}>
-          {Object.entries(appState.weights).map(([id,w])=>{
-            const dec=w.lastAvgReps?getWeightDecision(w.lastAvgReps,w.lastTargetReps,w.weightIncrement||2.5):null;
-            const name=SEED_NAMES[id]||id.replace(/_/g," ");
-            const hc=(appState.exerciseHistory?.[id]||[]).length;
-            return(<div key={id} onClick={()=>setHistModal({id,name})} style={{background:"#161616",border:"1px solid #222",borderRadius:12,padding:"14px",cursor:"pointer",position:"relative",transition:"border-color 0.2s"}} onMouseEnter={e=>e.currentTarget.style.borderColor="#333"} onMouseLeave={e=>e.currentTarget.style.borderColor="#222"}>
-              <div style={{fontSize:"0.62rem",color:"#666",marginBottom:4,lineHeight:1.3}}>{name}</div>
-              <div style={{display:"flex",alignItems:"baseline",gap:4,marginBottom:4}}><span style={{fontFamily:"Bebas Neue",fontSize:"2rem",color:"#f0f0f0",lineHeight:1}}>{w.weight}</span><span style={{fontSize:"0.65rem",color:"#555"}}>kg</span>{dec&&<span style={{fontSize:"0.8rem",color:dec.color,marginLeft:4}}>{dec.action==="increase"?"↑":dec.action==="decrease"?"↓":"→"}</span>}</div>
-              {w.lastAvgReps?<div style={{fontSize:"0.58rem",color:"#555"}}>{Number(w.lastAvgReps).toFixed(1)} / {w.lastTargetReps} reps last</div>:<div style={{fontSize:"0.58rem",color:"#444"}}>× {w.lastTargetReps} reps</div>}
-              <div style={{position:"absolute",top:8,right:10,fontSize:"0.52rem",color:hc>0?"#444":"#2a2a2a"}}>{hc>0?`${hc} sessions`:"tap for history"}</div>
-            </div>);
-          })}
-        </div>
-      </div>)}
+      {view==="weights"&&<WeightsView appState={appState} persist={persist} setHistModal={setHistModal}/>}
+
+      {/* MAP VIEW */}
+      {view==="map"&&<GymMapView/>}
 
       {/* FOCUS VIEW */}
-      {view==="focus"&&(<FocusView focus={focus} onUpdate={updateFocus} isFirstRun={false}
-        onDurationChange={(newFocus)=>{
-          // Instant save + rebuild when slider moves
-          const ns=persist({...appState,focus:newFocus});
-          hasGenerated.current=true;kickoff(ns);
-          setView("workout");
-        }}
-        onApply={(nf)=>{const ns=updateFocus(nf);hasGenerated.current=false;setView("workout");kickoff(ns);}}/>)}
+      {view==="focus"&&(<>
+        {/* Profile summary card at top of Focus tab */}
+        <div style={{paddingTop:20,marginBottom:0}}>
+          <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:12,padding:"12px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+            <div>
+              <div style={{fontSize:"0.6rem",color:"#555",fontWeight:700,letterSpacing:"0.08em",marginBottom:3}}>👤 YOUR PROFILE</div>
+              <div style={{fontSize:"0.72rem",color:"#888"}}>
+                {profile.age?<span style={{color:"#ccc",fontWeight:600}}>{profile.age}yo</span>:" "}
+                {profile.gender&&<span style={{color:"#777"}}> · {profile.gender}</span>}
+                {profile.goal&&<span style={{color:"#777"}}> · {({build_muscle:"build muscle",lose_weight:"lose weight",both:"build + lose",maintain:"maintain"})[profile.goal]||profile.goal}</span>}
+                {profile.workoutsPerCycle&&<span style={{color:"#555"}}> · {profile.workoutsPerCycle}-day cycle</span>}
+              </div>
+            </div>
+            <button onClick={()=>setShowProfileSetup(true)} style={{background:"#1a1a1a",border:"1px solid #2a2a2a",color:"#666",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:"0.62rem",flexShrink:0}}>Edit</button>
+          </div>
+        </div>
+        <FocusView focus={focus} onUpdate={updateFocus} isFirstRun={false}
+          onDurationChange={(newFocus)=>{
+            const ns=persist({...appState,focus:newFocus});
+            hasGenerated.current=true;kickoff(ns);
+            setView("workout");
+          }}
+          onApply={(nf)=>{const ns=updateFocus(nf);hasGenerated.current=false;setView("workout");kickoff(ns);}}/>
+      </>)}
 
     </div>
   </div>);
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+// ─── Error Boundary ───────────────────────────────────────────────────────────
+class ErrorBoundary extends React.Component{
+  constructor(props){super(props);this.state={hasError:false,error:null};}
+  static getDerivedStateFromError(err){return{hasError:true,error:err};}
+  render(){
+    if(!this.state.hasError)return this.props.children;
+    return(
+      <div style={{minHeight:"100vh",background:"#0e0e0e",fontFamily:"'DM Sans',sans-serif",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px",textAlign:"center"}}>
+        <style>{appStyle}</style>
+        <div style={{fontSize:"3rem",marginBottom:16}}>⚠️</div>
+        <div style={{fontFamily:"Bebas Neue",fontSize:"2rem",color:"#e31837",letterSpacing:"0.05em",marginBottom:8}}>SOMETHING WENT WRONG</div>
+        <div style={{fontSize:"0.75rem",color:"#555",marginBottom:24,lineHeight:1.7,maxWidth:320}}>{this.state.error?.message||"An unexpected error occurred."}</div>
+        <button onClick={()=>{this.setState({hasError:false,error:null});}} style={{background:"linear-gradient(135deg,#e31837,#ff4d6a)",border:"none",color:"#fff",borderRadius:12,padding:"12px 28px",cursor:"pointer",fontFamily:"Bebas Neue",fontSize:"1.1rem",letterSpacing:"0.1em",marginBottom:12}}>TRY AGAIN</button>
+        <button onClick={()=>{localStorage.removeItem(STORAGE_KEY);window.location.reload();}} style={{background:"transparent",border:"1px solid #333",color:"#555",borderRadius:12,padding:"10px 24px",cursor:"pointer",fontSize:"0.72rem"}}>Reset App Data</button>
+      </div>
+    );
+  }
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<ErrorBoundary><App/></ErrorBoundary>);
 </script>
 </body>
 </html>
