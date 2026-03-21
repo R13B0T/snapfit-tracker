@@ -59,18 +59,21 @@ const EXERCISE_LIBRARY={
     {id:"seated_chest_press",name:"Chest Press Machine",equipNum:"15",sets:3,reps:10,weightIncrement:2.5,startWeight:40,muscleGroup:"Chest",tags:["upper","chest"],note:"Control the return"},
     {id:"shoulder_press_mach",name:"Shoulder Press Machine",equipNum:"16",sets:3,reps:12,weightIncrement:2.5,startWeight:20,muscleGroup:"Shoulders",tags:["upper","shoulder"]},
     {id:"tricep_cable",name:"Tricep Pushdown",equipNum:"14",sets:3,reps:12,weightIncrement:2.5,startWeight:16.5,muscleGroup:"Triceps",tags:["upper"],note:"Keep elbows pinned"},
+    {id:"cable_fly",name:"Cable Fly",equipNum:"17",sets:3,reps:12,weightIncrement:2.5,startWeight:10,muscleGroup:"Chest",tags:["upper","chest"],note:"Cables at chest height — cross hands at centre, squeeze"},
   ],[
     {id:"leg_extension",name:"Leg Extension",equipNum:"10",sets:3,reps:12,weightIncrement:2.5,startWeight:51,muscleGroup:"Quads",tags:["lower","knee"]},
     {id:"hip_thrust_b",name:"Glute Drive",equipNum:"36",sets:4,reps:10,weightIncrement:5,startWeight:60,muscleGroup:"Glutes",tags:["lower"]},
     {id:"incline_press",name:"Incline Press Machine",equipNum:"21",sets:3,reps:12,weightIncrement:2.5,startWeight:35,muscleGroup:"Upper Chest",tags:["upper","chest"]},
     {id:"iso_lat_shoulder",name:"Shoulder Press (ISO)",equipNum:"19",sets:3,reps:10,weightIncrement:2.5,startWeight:29,muscleGroup:"Shoulders",tags:["upper","shoulder"]},
     {id:"pec_fly",name:"Pec Fly Machine",equipNum:"7",sets:3,reps:15,weightIncrement:2.5,startWeight:20,muscleGroup:"Chest",tags:["upper","chest"],note:"Wide arc — feel the stretch"},
+    {id:"cable_lateral_raise",name:"Cable Lateral Raise",equipNum:"17",sets:3,reps:15,weightIncrement:2.5,startWeight:5,muscleGroup:"Shoulders",tags:["upper","shoulder"],note:"Low cable by hip — raise to shoulder height, switch sides"},
   ],[
     {id:"leg_press_c",name:"Linear Leg Press",equipNum:"35",sets:3,reps:15,weightIncrement:5,startWeight:95,muscleGroup:"Quads",tags:["lower","knee"]},
     {id:"leg_curl",name:"Prone Leg Curl",equipNum:"11",sets:3,reps:12,weightIncrement:2.5,startWeight:37,muscleGroup:"Hamstrings",tags:["lower"]},
     {id:"chest_press_db",name:"DB Chest Press",equipNum:"29",sets:3,reps:12,weightIncrement:2.5,startWeight:15,muscleGroup:"Chest",tags:["upper","chest"],note:"Flat bench #26, dumbbells from rack #29"},
     {id:"lateral_raise",name:"Lateral Raise Machine",equipNum:"13",sets:3,reps:15,weightIncrement:2.5,startWeight:12,muscleGroup:"Shoulders",tags:["upper","shoulder"]},
     {id:"decline_press",name:"Decline Press",equipNum:"20",sets:3,reps:10,weightIncrement:2.5,startWeight:35,muscleGroup:"Lower Chest",tags:["upper","chest"]},
+    {id:"cable_tricep_ext",name:"Cable Tricep Extension",equipNum:"17",sets:3,reps:12,weightIncrement:2.5,startWeight:10,muscleGroup:"Triceps",tags:["upper"],note:"High cable — overhead extension, elbows close to head"},
   ]],
   B:[[
     {id:"seated_row",name:"Seated Row",equipNum:"6",sets:4,reps:12,weightIncrement:2.5,startWeight:54,muscleGroup:"Back",tags:["upper","back"],note:"Pull to lower chest, squeeze shoulder blades"},
@@ -92,6 +95,7 @@ const EXERCISE_LIBRARY={
     {id:"bicep_curl_mach_b",name:"Bicep Curl Machine",equipNum:"14",sets:3,reps:12,weightIncrement:2.5,startWeight:30,muscleGroup:"Biceps",tags:["upper"]},
     {id:"seated_row_b",name:"Seated Row",equipNum:"6",sets:3,reps:15,weightIncrement:2.5,startWeight:48,muscleGroup:"Back",tags:["upper","back"],note:"Lighter, higher reps — hold 1 sec"},
     {id:"ab_crunch_c",name:"Abdominal Crunch Machine",equipNum:"48",sets:4,reps:15,weightIncrement:2.5,startWeight:20,muscleGroup:"Core",tags:["core"]},
+    {id:"face_pull",name:"Face Pull",equipNum:"17",sets:3,reps:15,weightIncrement:2.5,startWeight:12.5,muscleGroup:"Rear Delts",tags:["upper","shoulder"],note:"High cable, rope handle — pull to forehead, elbows flare wide"},
   ]],
   C:[[
     {id:"leg_press_p",name:"Linear Leg Press",equipNum:"35",sets:4,reps:10,weightIncrement:5,startWeight:108,muscleGroup:"Quads",tags:["lower","knee"],note:"Heavy today — slow and controlled"},
@@ -134,7 +138,7 @@ function getDayTypeAtIdx(cycleIdx,profile){const seq=getDaySeq(profile);return D
 const EFFORT_RATINGS=[{key:"light",emoji:"😎",label:"Too Light",desc:"Could've done way more",color:"#4fc3f7"},{key:"nailed",emoji:"💪",label:"Nailed It",desc:"Hit it perfectly",color:"#69f0ae"},{key:"tough",emoji:"😤",label:"Really Tough",desc:"Ground it out — good work",color:"#ffd740"},{key:"failed",emoji:"🔴",label:"Nearly Failed",desc:"Struggled to finish",color:"#ff6b6b"}];
 const FB_TITLES={A:["Leg & Push Power","Quad & Chest Builder","Push Day Grind"],B:["Back Attack","Pull & Core Crusher","Row Day"],C:["Full Body Blitz","Total Body Strength","Head to Toe"]};
 const FB_TIPS={A:["Drive through heels on every leg movement","Control the negative — 2 seconds down","Full range beats heavy weight every time"],B:["Pull with elbows, not hands","Squeeze at peak contraction — 1 second","Retract shoulder blades on every row"],C:["Full body — stay focused between exercises","Quality over quantity on every compound","Breathe out on effort, in on return"]};
-const EQUIP_STR=`AVAILABLE STATIONS (ONLY these numbers):\n#6 Seated Row|#7 Pec Fly/Rear Delt|#8 Calf|#10 Leg Extension|#11 Prone Leg Curl|#12 Hip Abductor|#13 Lateral Raise|#14 Bicep/Tricep Machine|#15 Chest Press Machine|#16 Shoulder Press Machine|#17 Multi Jungle|#19 Shoulder Press 2|#20 Decline Press|#21 Incline Press|#22 Olympic Bench|#23 Smith Machine|#24 Dual Pulley|#25 Adj Bench|#26 Flat Bench|#29 Dumbbells & Rack|#32 Back Extension|#33 Preacher Curl|#35 Linear Leg Press|#36 Glute Drive|#37 Leg Raise/Dip|#38 High Row|#39 Row Machine|#40 Low Row|#41 Half Rack|#48 Ab Crunch Machine`;
+const EQUIP_STR=`AVAILABLE STATIONS (ONLY these numbers):\n#6 Seated Row|#7 Pec Fly/Rear Delt|#8 Calf|#10 Leg Extension|#11 Prone Leg Curl|#12 Hip Abductor|#13 Lateral Raise|#14 Bicep/Tricep Machine|#15 Chest Press Machine|#16 Shoulder Press Machine|#17 Multi Jungle (cable/functional)|#19 Shoulder Press 2|#20 Decline Press|#21 Incline Press|#22 Olympic Bench|#23 Smith Machine|#24 Dual Pulley|#25 Adj Bench|#26 Flat Bench|#29 Dumbbells & Rack|#32 Back Extension|#33 Preacher Curl|#35 Linear Leg Press|#36 Glute Drive|#37 Leg Raise/Dip|#38 High Row|#39 Row Machine|#40 Low Row|#41 Half Rack|#48 Ab Crunch Machine`;
 
 const VARIATION_TYPES=["Standard","Slow Eccentric (4-count)","Partial Range","Pause Reps","Explosive Concentric","Drop Set (last set)"];
 const VARIATION_TIPS={
@@ -195,6 +199,10 @@ const EXERCISE_TIPS={
   preacher_curl:{muscle:"Biceps (peak contraction)",cue:"Strict form — no swinging, full extension at bottom"},
   hip_abductor:{muscle:"Glutes / Hip Abductors",cue:"Control the return — don't let the weight crash"},
   db_row:{muscle:"Back / Biceps",cue:"Brace on bench, pull elbow to ceiling — not flared out to side"},
+  cable_fly:{muscle:"Chest (cable)",cue:"Arms wide, slight elbow bend — cross hands at centre, hold and squeeze"},
+  cable_lateral_raise:{muscle:"Medial Delt",cue:"Low cable at hip — raise to shoulder height, pinky slightly higher than thumb"},
+  cable_tricep_ext:{muscle:"Triceps (long head)",cue:"Elbows close to head — extend fully overhead, control the return"},
+  face_pull:{muscle:"Rear Delts / Rotator Cuff",cue:"Pull rope to forehead — elbows high and wide, pause at full contraction"},
 };
 
 const STRETCH_LIBRARY={
