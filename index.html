@@ -982,7 +982,7 @@ function App(){
           </div>
           <div style={{display:"flex",gap:5,alignItems:"center",flexShrink:0}}>
             <span onClick={()=>setView("focus")} style={{fontSize:"0.52rem",fontWeight:700,color:aiOn?"#69f0ae":"#555",background:aiOn?"rgba(105,240,174,0.08)":"transparent",border:`1px solid ${aiOn?"rgba(105,240,174,0.3)":"#2a2a2a"}`,padding:"3px 8px",borderRadius:20,whiteSpace:"nowrap",cursor:"pointer"}}>{aiOn?"🤖 AI ON":"📋 Smart Plan"}</span>
-            {activeBadges.length>0&&(<span onClick={()=>setView("focus")} style={{fontSize:"0.52rem",fontWeight:700,color:"#ffd740",background:"rgba(255,215,64,0.08)",border:"1px solid rgba(255,215,64,0.3)",padding:"3px 8px",borderRadius:20,whiteSpace:"nowrap",cursor:"pointer"}}>⚠ {activeBadges.length} restriction{activeBadges.length!==1?"s":""}</span>)}
+            {activeBadges.length>0&&(<span onClick={()=>setView("focus")} style={{fontSize:"1rem",lineHeight:1,cursor:"pointer"}} title="Restrictions active">⚠️</span>)}
           </div>
         </div>
         <div style={{display:"flex",borderTop:"1px solid #1a1a1a"}}>
