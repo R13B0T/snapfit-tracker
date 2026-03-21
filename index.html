@@ -25,7 +25,7 @@ const STORAGE_KEY="snapfit_v11";
 const OLD_STORAGE_KEY="snapfit_v10";
 const appStyle=`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap');*{box-sizing:border-box;margin:0;padding:0;}body{background:#0e0e0e;}::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-track{background:#1a1a1a;}::-webkit-scrollbar-thumb{background:#e31837;border-radius:2px;}@keyframes slideUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}@keyframes spin{to{transform:rotate(360deg)}}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes popIn{0%{transform:scale(0.85);opacity:0}60%{transform:scale(1.05)}100%{transform:scale(1);opacity:1}}.dur-slider{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:3px;outline:none;cursor:pointer;}.dur-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:24px;height:24px;border-radius:50%;background:#e31837;cursor:pointer;border:3px solid #0e0e0e;box-shadow:0 0 0 2px #e31837;}.dur-slider::-moz-range-thumb{width:24px;height:24px;border-radius:50%;background:#e31837;cursor:pointer;border:3px solid #0e0e0e;}@keyframes rebuildPulse{0%{opacity:1}50%{opacity:0.4}100%{opacity:1}}`;
 
-const DEFAULT_FOCUS={trainingFocus:"balanced",workoutDuration:45,deload:false,skipKnees:false,skipAnkle:false,skipShoulders:false,skipBack:false,skipChest:false,customNote:""};
+const DEFAULT_FOCUS={trainingFocus:"balanced",workoutDuration:45,deload:false,skipKnees:false,skipAnkle:false,skipShoulders:false,skipBack:false,skipChest:false,customNote:"",advancedMode:false,targetMuscles:[]};
 const DURATION_OPTIONS=[20,30,45,60,75,90];
 function getDurationConfig(mins){
   const m=mins||45;
@@ -136,9 +136,122 @@ const FB_TITLES={A:["Leg & Push Power","Quad & Chest Builder","Push Day Grind"],
 const FB_TIPS={A:["Drive through heels on every leg movement","Control the negative — 2 seconds down","Full range beats heavy weight every time"],B:["Pull with elbows, not hands","Squeeze at peak contraction — 1 second","Retract shoulder blades on every row"],C:["Full body — stay focused between exercises","Quality over quantity on every compound","Breathe out on effort, in on return"]};
 const EQUIP_STR=`AVAILABLE STATIONS (ONLY these numbers):\n#6 Seated Row|#7 Pec Fly/Rear Delt|#8 Calf|#10 Leg Extension|#11 Prone Leg Curl|#12 Hip Abductor|#13 Lateral Raise|#14 Bicep/Tricep Machine|#15 Chest Press Machine|#16 Shoulder Press Machine|#17 Multi Jungle|#19 Shoulder Press 2|#20 Decline Press|#21 Incline Press|#22 Olympic Bench|#23 Smith Machine|#24 Dual Pulley|#25 Adj Bench|#26 Flat Bench|#29 Dumbbells & Rack|#32 Back Extension|#33 Preacher Curl|#35 Linear Leg Press|#36 Glute Drive|#37 Leg Raise/Dip|#38 High Row|#39 Row Machine|#40 Low Row|#41 Half Rack|#48 Ab Crunch Machine`;
 
+const VARIATION_TYPES=["Standard","Slow Eccentric (4-count)","Partial Range","Pause Reps","Explosive Concentric","Drop Set (last set)"];
+const EXERCISE_TIPS={
+  leg_press:{muscle:"Quads / Glutes",cue:"Feet shoulder-width, drive through heels, stop just short of lock-out"},
+  leg_press_c:{muscle:"Quads / Glutes",cue:"Higher foot placement shifts emphasis to glutes and hamstrings"},
+  leg_press_p:{muscle:"Quads / Glutes",cue:"Heavy today — slow and controlled, 3 seconds down"},
+  leg_press_q:{muscle:"Quads",cue:"Higher reps — squeeze quads at top of each rep"},
+  leg_curl:{muscle:"Hamstrings",cue:"Curl slow — pause at top, lower in 3 seconds"},
+  leg_curl_p:{muscle:"Hamstrings",cue:"Full range — don't let hips rise off the pad"},
+  leg_extension:{muscle:"Quads",cue:"Full extension, hold 1 second at top, lower controlled"},
+  leg_extension_p:{muscle:"Quads",cue:"Squeeze at top — focus on the contraction not the weight"},
+  hip_thrust:{muscle:"Glutes",cue:"Drive hips to ceiling, squeeze glutes at top, chin tucked"},
+  hip_thrust_b:{muscle:"Glutes",cue:"Higher reps — keep the burn going, pause at top"},
+  hip_thrust_p:{muscle:"Glutes / Hamstrings",cue:"Heavy variation — drive with heels, not toes"},
+  hip_thrust_q:{muscle:"Glutes",cue:"Full range — lower until hips almost touch pad"},
+  seated_chest_press:{muscle:"Chest / Front Delt / Triceps",cue:"Control the return — 3 seconds back, pause at stretch"},
+  seated_chest_p:{muscle:"Chest",cue:"Heavy — control the negative, full range"},
+  incline_press:{muscle:"Upper Chest / Front Delt",cue:"Incline angle targets upper pecs — control the descent"},
+  incline_press_p:{muscle:"Upper Chest",cue:"Feel the stretch at the bottom — don't rush the return"},
+  chest_press_db:{muscle:"Chest / Triceps",cue:"Full press — slight arch, feet flat, squeeze at top"},
+  chest_press_q:{muscle:"Chest",cue:"Dumbbell variation — extra range of motion at bottom"},
+  pec_fly:{muscle:"Chest (stretch)",cue:"Wide arc with a slight bend in elbows — feel the deep stretch"},
+  decline_press:{muscle:"Lower Chest",cue:"Decline angle shifts emphasis to lower pec fibres"},
+  shoulder_press_mach:{muscle:"Shoulders / Triceps",cue:"Stop just short of lock-out — keeps tension on shoulders"},
+  shoulder_press_p:{muscle:"Shoulders",cue:"Press strong — control the return, don't drop it"},
+  iso_lat_shoulder:{muscle:"Shoulders (unilateral)",cue:"Press one side at a time — notice any strength differences"},
+  iso_lat_p:{muscle:"Shoulders",cue:"Unilateral — full range, squeeze at top"},
+  lateral_raise:{muscle:"Medial Delt",cue:"Raise to shoulder height only — pinky slightly higher than thumb"},
+  lateral_raise_q:{muscle:"Medial Delt",cue:"Keep a slight forward lean for better medial delt activation"},
+  tricep_cable:{muscle:"Triceps",cue:"Elbows pinned at sides — only forearms move, full extension"},
+  tricep_cable_p:{muscle:"Triceps",cue:"Higher weight — keep those elbows locked to your sides"},
+  seated_row:{muscle:"Mid Back / Biceps",cue:"Pull to lower chest, squeeze shoulder blades together for 1 sec"},
+  seated_row_b:{muscle:"Mid Back",cue:"Lighter, higher reps — hold the contraction 1 full second"},
+  seated_row_p:{muscle:"Mid Back",cue:"Heavy — retract scapula before pulling, keep chest up"},
+  lat_pulldown:{muscle:"Lats / Biceps",cue:"Pull bar to upper chest — lean back slightly, drive elbows down"},
+  lat_pulldown_b:{muscle:"Lats",cue:"Wider grip shifts more emphasis to outer lats"},
+  lat_pulldown_p:{muscle:"Lats",cue:"Heavy — initiate with lats, not biceps"},
+  bicep_curl_mach:{muscle:"Biceps / Brachialis",cue:"Full range — let arm fully extend at bottom for max stretch"},
+  bicep_curl_mach_b:{muscle:"Biceps",cue:"Slightly higher reps — feel the squeeze at the top"},
+  bicep_curl_q:{muscle:"Biceps",cue:"Don't swing — strict form with controlled tempo"},
+  rear_delt:{muscle:"Rear Delts / Upper Back",cue:"Use the reverse fly setting on the pec machine — arms wide"},
+  back_ext:{muscle:"Lower Back / Glutes",cue:"Hinge at hips only — stop at neutral spine, no hyperextension"},
+  back_ext_b:{muscle:"Lower Back",cue:"Controlled movement — squeeze glutes at the top"},
+  ab_crunch:{muscle:"Rectus Abdominis",cue:"Slow squeeze at top — exhale on effort, inhale on return"},
+  ab_crunch_b:{muscle:"Core",cue:"Focus on the crunch — small movement but deep contraction"},
+  ab_crunch_c:{muscle:"Core",cue:"Higher volume today — breathe consistently throughout"},
+  high_row:{muscle:"Upper Back / Rear Delt",cue:"Pull elbows down and back — lead with elbows not hands"},
+  high_row_p:{muscle:"Upper Back",cue:"Heavy — keep chest up, don't lean back"},
+  low_row:{muscle:"Mid Back",cue:"Keep lower back neutral — don't round at the bottom"},
+  low_row_q:{muscle:"Mid Back / Lats",cue:"Underhand grip variation hits lower lats more"},
+  preacher_curl:{muscle:"Biceps (peak contraction)",cue:"Strict form — no swinging, full extension at bottom"},
+  hip_abductor:{muscle:"Glutes / Hip Abductors",cue:"Control the return — don't let the weight crash"},
+  db_row:{muscle:"Back / Biceps",cue:"Brace on bench, pull elbow to ceiling — not flared out to side"},
+};
+
+const STRETCH_LIBRARY={
+  Quads:[{name:"Standing Quad Stretch",dur:"30s each",cue:"Pull heel to glutes, knee pointing down, stand tall"}],
+  Hamstrings:[{name:"Seated Hamstring Stretch",dur:"40s each",cue:"Extend one leg, hinge forward from hips — don't round back"}],
+  Glutes:[{name:"Figure-4 Stretch",dur:"45s each",cue:"Cross ankle over knee, sit back — feel it in outer glute"}],
+  "Glutes/Hips":[{name:"Figure-4 Stretch",dur:"45s each",cue:"Cross ankle over knee, sit back into a squat"}],
+  Chest:[{name:"Doorway Chest Stretch",dur:"30s",cue:"Arms at 90°, lean gently through doorway"}],
+  "Upper Chest":[{name:"Doorway Chest Stretch (arms high)",dur:"30s",cue:"Raise arms above 90° to target upper pecs"}],
+  "Lower Chest":[{name:"Doorway Chest Stretch (arms low)",dur:"30s",cue:"Lower arm position targets lower pec fibres"}],
+  Back:[{name:"Child's Pose",dur:"45s",cue:"Sit back on heels, arms stretched out, relax lower back"}],
+  "Lower Back":[{name:"Cat-Cow Stretch",dur:"60s",cue:"On all fours, arch and round spine slowly — 10 reps"}],
+  Lats:[{name:"Lat Side Stretch",dur:"30s each",cue:"Raise arm overhead, lean slowly to opposite side"}],
+  Shoulders:[{name:"Cross-Body Shoulder Stretch",dur:"30s each",cue:"Pull arm across chest, keep shoulder pressed down"}],
+  "Rear Delts":[{name:"Chest Hug Stretch",dur:"30s",cue:"Wrap arms around yourself, round upper back and hold"}],
+  Triceps:[{name:"Overhead Tricep Stretch",dur:"30s each",cue:"Elbow behind head, gently pull with other hand"}],
+  Biceps:[{name:"Wall Bicep Stretch",dur:"30s each",cue:"Arm straight, palm on wall, rotate body away slowly"}],
+  "Upper Chest":[{name:"Doorway Upper Chest Stretch",dur:"30s",cue:"Arms raised high — opens upper pec and front delt"}],
+  Core:[{name:"Cobra Stretch",dur:"30s",cue:"Press up from floor, hips down, look forward and breathe"}],
+};
+const WARMUP_MOVES=[
+  {name:"Arm Circles",dur:"30s",cue:"Big slow circles — 15 forward, 15 backward"},
+  {name:"Leg Swings",dur:"20 each",cue:"Hold wall, swing leg front to back — loosen hips"},
+  {name:"Hip Circles",dur:"20 each side",cue:"Hands on hips, make big circles — activate hip flexors"},
+  {name:"Shoulder Rolls",dur:"20s",cue:"Roll forward 10, backward 10 — decompress the joint"},
+  {name:"Bodyweight Squats",dur:"15 reps",cue:"Slow down 3 seconds, pause, stand tall — warm up knees"},
+  {name:"Hip Hinge",dur:"15 reps",cue:"Soft knees, push hips back, feel hamstrings stretch"},
+];
+function getStretchRoutine(exercises){
+  const muscles=[...new Set((exercises||[]).map(e=>e.muscleGroup).filter(Boolean))];
+  const stretches=[];
+  muscles.forEach(m=>{const s=STRETCH_LIBRARY[m];if(s&&!stretches.find(x=>x.name===s[0].name))stretches.push(...s);});
+  return stretches.slice(0,5);
+}
+function getWarmupMoves(exercises){
+  const muscles=(exercises||[]).map(e=>e.muscleGroup||"");
+  const hasLegs=muscles.some(m=>["Quads","Hamstrings","Glutes","Glutes/Hips"].includes(m));
+  const hasUpper=muscles.some(m=>["Chest","Upper Chest","Lower Chest","Shoulders","Rear Delts","Back","Lats","Triceps","Biceps"].includes(m));
+  const moves=[];
+  if(hasUpper&&hasLegs)return[WARMUP_MOVES[0],WARMUP_MOVES[1],WARMUP_MOVES[3],WARMUP_MOVES[4]];
+  if(hasLegs)return[WARMUP_MOVES[1],WARMUP_MOVES[2],WARMUP_MOVES[4],WARMUP_MOVES[5]];
+  if(hasUpper)return[WARMUP_MOVES[0],WARMUP_MOVES[3],WARMUP_MOVES[2]];
+  return WARMUP_MOVES.slice(0,3);
+}
+const MUSCLE_GROUPS=[
+  {key:"chest",label:"Chest",cat:"push"},{key:"upper_chest",label:"Upper Chest",cat:"push"},
+  {key:"shoulders",label:"Shoulders",cat:"push"},{key:"front_delt",label:"Front Delt",cat:"push"},
+  {key:"triceps",label:"Triceps",cat:"push"},
+  {key:"upper_back",label:"Upper Back",cat:"pull"},{key:"lats",label:"Lats",cat:"pull"},
+  {key:"biceps",label:"Biceps",cat:"pull"},{key:"rear_delt",label:"Rear Delt",cat:"pull"},
+  {key:"forearms",label:"Forearms",cat:"pull"},{key:"lower_back",label:"Lower Back",cat:"pull"},
+  {key:"quads",label:"Quads",cat:"legs"},{key:"hamstrings",label:"Hamstrings",cat:"legs"},
+  {key:"glutes",label:"Glutes",cat:"legs"},{key:"hip_flexors",label:"Hip Flexors",cat:"legs"},
+  {key:"calves",label:"Calves",cat:"legs"},{key:"adductors",label:"Adductors",cat:"legs"},
+  {key:"abs",label:"Abs",cat:"core"},{key:"obliques",label:"Obliques",cat:"core"},
+];
+
 function applyFocus(exercises,focus){
   let f=exercises;
-  if(focus.trainingFocus==="upper")f=f.filter(e=>e.tags?.includes("upper")||e.tags?.includes("core"));
+  if(focus.advancedMode&&focus.targetMuscles?.length){
+    const targets=focus.targetMuscles.map(t=>t.toLowerCase());
+    const filtered=f.filter(e=>{const mg=(e.muscleGroup||"").toLowerCase();const tags=e.tags||[];return targets.some(t=>mg.includes(t)||tags.some(tag=>t.includes(tag)||tag.includes(t)));});
+    if(filtered.length>=2)f=filtered;
+  }else if(focus.trainingFocus==="upper")f=f.filter(e=>e.tags?.includes("upper")||e.tags?.includes("core"));
   else if(focus.trainingFocus==="lower")f=f.filter(e=>e.tags?.includes("lower")||e.tags?.includes("core"));
   else if(focus.trainingFocus==="core")f=f.filter(e=>e.tags?.includes("core")||e.tags?.includes("upper"));
   if(focus.skipKnees)f=f.filter(e=>!e.tags?.includes("knee"));
@@ -151,12 +264,23 @@ function applyFocus(exercises,focus){
   return f.slice(0,6);
 }
 function getFallback(dayId,sessionNum,recentIds,focus){
-  const pool=EXERCISE_LIBRARY[dayId][sessionNum%3];
+  // Pick pool with least overlap with recent exercises
+  const pools=EXERCISE_LIBRARY[dayId];
+  const overlap=i=>pools[i].filter(e=>recentIds.includes(e.id)).length;
+  const poolIdx=[0,1,2].sort((a,b)=>overlap(a)-overlap(b))[0]??sessionNum%3;
+  const pool=pools[poolIdx];
   const focused=applyFocus(pool,focus);
   const dur=getDurationConfig(focus.workoutDuration||45);
-  let exs=focused.filter(e=>!recentIds.slice(0,6).includes(e.id)).length>=3?focused.filter(e=>!recentIds.slice(0,6).includes(e.id)):focused;
+  let exs=focused.filter(e=>!recentIds.slice(0,10).includes(e.id)).length>=3?focused.filter(e=>!recentIds.slice(0,10).includes(e.id)):focused;
   // Cap count and sets to match duration
-  exs=exs.slice(0,dur.maxEx).map(e=>({...e,sets:dur.setsHint<=2?Math.min(e.sets,2):dur.setsHint<=3?Math.min(e.sets,3):e.sets}));
+  exs=exs.slice(0,dur.maxEx).map((e,i)=>{
+    const sets=dur.setsHint<=2?Math.min(e.sets,2):dur.setsHint<=3?Math.min(e.sets,3):e.sets;
+    // Assign variation to 1-2 exercises per session (skip index 0 and compound lifts)
+    const isIsolation=!["Quads","Hamstrings","Back","Lats","Chest","Upper Chest"].includes(e.muscleGroup);
+    const varIdx=(sessionNum+i)%VARIATION_TYPES.length;
+    const variation=(i===2||i===4)&&isIsolation?VARIATION_TYPES[varIdx===0?1:varIdx]:null;
+    return{...e,sets,variation};
+  });
   let tip=FB_TIPS[dayId][sessionNum%FB_TIPS[dayId].length];
   if(focus.deload)tip="Deload week — lighter loads, perfect form, full recovery";
   return{sessionTitle:FB_TITLES[dayId][sessionNum%FB_TITLES[dayId].length],focusTip:tip,exercises:exs,isFallback:true};
@@ -179,7 +303,7 @@ function getRec(exId,startWeight,weights,focus){
   const arrow=dec.action==="increase"?"↑":dec.action==="decrease"?"↓":"→";
   return{weight:w,badge:focus?.deload?`📉 ${w}kg`:`${arrow} ${w}kg`,badgeColor:focus?.deload?"#ffa040":dec.color,detail:focus?.deload?`Deload — 80% of ${s.weight}kg`:`Last: ${Number(s.lastAvgReps).toFixed(1)}/${s.lastTargetReps} reps · ${dec.label}`};
 }
-function buildPerfNotes(history,weights){return history.slice(0,3).map(h=>{const lines=(h.exerciseIds||[]).map(id=>{const w=weights[id];if(!w||!w.lastAvgReps)return null;return`${id}:${Number(w.lastAvgReps).toFixed(1)}/${w.lastTargetReps}@${w.lastWeight}kg`;}).filter(Boolean);return lines.length?`${h.date}: ${lines.join(",")}`:null;}).filter(Boolean).join("\n");}
+function buildPerfNotes(history,weights){return history.slice(0,3).map(h=>{const lines=(h.exerciseIds||[]).map(id=>{const w=weights[id];if(!w||!w.lastAvgReps)return null;const ratingStr=w.lastRatings?.length?`[${w.lastRatings.join(",")}]`:"";return`${id}:${Number(w.lastAvgReps).toFixed(1)}/${w.lastTargetReps}@${w.lastWeight}kg${ratingStr}`;}).filter(Boolean);return lines.length?`${h.date}: ${lines.join(",")}`:null;}).filter(Boolean).join("\n");}
 function buildSeedSummary(weights){return Object.entries(weights).map(([id,w])=>`${SEED_NAMES[id]||id}:${w.weight}kg*${w.lastTargetReps}reps`).join(", ");}
 function buildFocusInstructions(focus,profile){
   const dur=getDurationConfig(focus.workoutDuration||45);
@@ -193,7 +317,14 @@ function buildFocusInstructions(focus,profile){
     const cycleStr=`${profile.workoutsPerCycle||3}-day cycle`;
     p.unshift(`USER PROFILE: ${ageStr}, ${genderStr}, goal: ${goalStr}, training on a ${cycleStr}. Tailor intensity, rep ranges, and progressions accordingly.`);
   }
-  if(focus.trainingFocus==="upper")p.push("FOCUS: Upper body ONLY.");if(focus.trainingFocus==="lower")p.push("FOCUS: Lower body ONLY.");if(focus.trainingFocus==="core")p.push("FOCUS: Core + upper.");if(focus.deload)p.push("DELOAD: Reduce weights 20%, increase reps 2-3.");if(focus.skipKnees)p.push("SKIP KNEES: No leg press/extension/squats.");if(focus.skipAnkle)p.push("SKIP ANKLE: No calf raises, lunges, sled, single-leg balance.");if(focus.skipShoulders)p.push("SKIP SHOULDERS: No overhead press or lateral raises.");if(focus.skipBack)p.push("SKIP BACK: No rows or back extensions.");if(focus.skipChest)p.push("SKIP CHEST: No pressing or pec fly.");if(focus.customNote)p.push(`USER NOTE: ${focus.customNote}`);return"\n\nSPECIAL INSTRUCTIONS (MUST FOLLOW):\n"+p.join("\n");
+  p.push("VARIETY RULE: Ensure balanced muscle coverage — do NOT repeat the same primary muscle group twice in one session. Include at least one push, one pull, one leg movement per session (unless restrictions say otherwise). Rotate stations from previous sessions.");
+  p.push("EFFORT RATINGS: Rep data includes [ratings] where light=too easy, nailed=perfect, tough=hard but done, failed=couldn't finish. If ratings are mostly 'light', increase weight even if reps were borderline. If 'failed' appears, hold or reduce weight.");
+  p.push("VARIATION: For 1-2 isolation exercises per session, include a 'variation' field — choose from: 'Slow Eccentric (4-count)', 'Partial Range', 'Pause Reps', 'Explosive Concentric'. Skip variations on heavy compound movements for safety.");
+  if(focus.advancedMode&&focus.targetMuscles?.length)p.push(`TARGET MUSCLES: ${focus.targetMuscles.join(", ")}. Prioritise exercises hitting these specific muscle groups. Still respect all injury restrictions.`);
+  else if(focus.trainingFocus==="upper")p.push("FOCUS: Upper body ONLY.");
+  else if(focus.trainingFocus==="lower")p.push("FOCUS: Lower body ONLY.");
+  else if(focus.trainingFocus==="core")p.push("FOCUS: Core + upper.");
+  if(focus.deload)p.push("DELOAD: Reduce weights 20%, increase reps 2-3.");if(focus.skipKnees)p.push("SKIP KNEES: No leg press/extension/squats.");if(focus.skipAnkle)p.push("SKIP ANKLE: No calf raises, lunges, sled, single-leg balance.");if(focus.skipShoulders)p.push("SKIP SHOULDERS: No overhead press or lateral raises.");if(focus.skipBack)p.push("SKIP BACK: No rows or back extensions.");if(focus.skipChest)p.push("SKIP CHEST: No pressing or pec fly.");if(focus.customNote)p.push(`USER NOTE: ${focus.customNote}`);return"\n\nSPECIAL INSTRUCTIONS (MUST FOLLOW):\n"+p.join("\n");
 }function getNextSetSuggestion(weight,reps,targetReps,rating,inc){
   if(!rating)return null;const r=EFFORT_RATINGS.find(e=>e.key===rating);if(!r)return null;
   if(rating==="light"&&reps>=targetReps)return{msg:`${r.emoji} Too light — try ${+(weight+inc).toFixed(1)}kg next set`,color:r.color};
@@ -210,10 +341,11 @@ function getAIHeaders(){
   if(!key)throw new Error("no_key");
   return{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"};
 }
-async function tryAIWorkout(dayType,sessionNum,recentIds,perfNotes,weights,focus,profile){
+async function tryAIWorkout(dayType,sessionNum,recentIds,perfNotes,weights,focus,profile,lastFeeling){
   const fi=buildFocusInstructions(focus,profile);
   const system=`You are a personal trainer AI for Snap Fitness Watagan Park.\nESTABLISHED STRENGTH: ${buildSeedSummary(weights)}\n\n${EQUIP_STR}\n${fi}\n\nRULES: Every exercise MUST use a station number from the list above. equipNum must be the exact number string. name must match station. Follow ALL special instructions. Respond ONLY valid JSON.`;
-  const msg=`Session #${sessionNum} - ${dayType.name} (Day ${dayType.id})\nAvoid repeating: ${recentIds.join(",")||"none"}\n${perfNotes?`Recent performance:\n${perfNotes}`:""}\nGenerate 5-6 exercises. Adjust weights/sets for progressive overload.\n{"sessionTitle":"title","focusTip":"tip max 14 words","exercises":[{"id":"snake_case","name":"Exact station name","equipNum":"num","sets":3,"reps":12,"weightIncrement":2.5,"startWeight":10,"muscleGroup":"Chest","note":"tip or null"}]}`;
+  const feelingNote=lastFeeling?.feeling?`\nLast session feeling: ${lastFeeling.feeling}${lastFeeling.note?` — "${lastFeeling.note}"`:""}. Adjust intensity accordingly.`:"";
+  const msg=`Session #${sessionNum} - ${dayType.name} (Day ${dayType.id})\nAvoid repeating: ${recentIds.join(",")||"none"}\n${perfNotes?`Recent performance (format: id:avgReps/targetReps@weight[ratings]):\n${perfNotes}`:""}${feelingNote}\nGenerate 5-6 exercises with full muscle variety. Adjust weights/sets for progressive overload.\n{"sessionTitle":"title","focusTip":"tip max 14 words","exercises":[{"id":"snake_case","name":"Exact station name","equipNum":"num","sets":3,"reps":12,"weightIncrement":2.5,"startWeight":10,"muscleGroup":"Chest","variation":"Slow Eccentric (4-count) or null","note":"tip or null"}]}`;
   const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),9000);
   const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:getAIHeaders(),body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system,messages:[{role:"user",content:msg}]}),signal:ctrl.signal});
   if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(err?.error?.message||`HTTP ${res.status}`);}
@@ -304,6 +436,33 @@ function DayPickerModal({currentIdx,onPick,onClose}){
             {i===currentIdx&&<span style={{fontSize:"0.56rem",color:d.color,fontWeight:700}}>SCHEDULED</span>}
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Duration Picker Modal ────────────────────────────────────────────────────
+function DurationPickerModal({currentDuration,onPick,onClose}){
+  const[sel,setSel]=useState(currentDuration||45);
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:150,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#161616",border:"1px solid #2a2a2a",borderRadius:"20px 20px 0 0",padding:"24px 20px 48px",width:"100%",maxWidth:600,animation:"slideUp 0.25s ease"}}>
+        <div style={{fontFamily:"Bebas Neue",fontSize:"1.6rem",color:"#f0f0f0",letterSpacing:"0.06em",marginBottom:4}}>HOW LONG TODAY?</div>
+        <div style={{fontSize:"0.68rem",color:"#555",marginBottom:18}}>Pick your workout duration — this sets the exercise count</div>
+        <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20}}>
+          {DURATION_OPTIONS.map(m=>{const cfg=getDurationConfig(m);const active=sel===m;return(
+            <button key={m} onClick={()=>setSel(m)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderRadius:12,border:`1.5px solid ${active?cfg.color+"88":"#252525"}`,background:active?`${cfg.color}12`:"#111",cursor:"pointer",textAlign:"left",transition:"all 0.15s"}}>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <span style={{fontSize:"1.3rem"}}>{cfg.emoji}</span>
+                <div><div style={{fontSize:"0.85rem",fontWeight:700,color:active?cfg.color:"#888"}}>{cfg.label} <span style={{fontWeight:400,color:"#555"}}>— {m} min</span></div><div style={{fontSize:"0.62rem",color:"#444",marginTop:1}}>{cfg.desc}</div></div>
+              </div>
+              <div style={{width:20,height:20,borderRadius:"50%",border:`2px solid ${active?cfg.color:"#333"}`,background:active?cfg.color:"transparent",flexShrink:0}}/>
+            </button>
+          );})}
+        </div>
+        <button onClick={()=>onPick(sel)} style={{width:"100%",height:52,borderRadius:14,border:"none",cursor:"pointer",fontFamily:"Bebas Neue",fontSize:"1.25rem",letterSpacing:"0.1em",background:"linear-gradient(135deg,#e31837,#ff4d6a)",color:"#fff",boxShadow:"0 4px 20px rgba(227,24,55,0.35)"}}>
+          GENERATE WORKOUT →
+        </button>
       </div>
     </div>
   );
@@ -616,74 +775,46 @@ function AIKeyCard(){
 }
 
 // ─── Focus View ───────────────────────────────────────────────────────────────
-function FocusView({focus,onUpdate,onApply,onDurationChange,isFirstRun=false}){
+function FocusView({focus,onUpdate,onApply,isFirstRun=false}){
   const[local,setLocal]=useState({...focus});
   const changed=JSON.stringify(local)!==JSON.stringify(focus);
-  const focusOpts=[{key:"balanced",label:"⚖️ Balanced",desc:"Full body rotation as normal"},{key:"upper",label:"💪 Upper Body Phase",desc:"Chest, back, shoulders, arms only"},{key:"lower",label:"🦵 Lower Body Phase",desc:"Legs, glutes, hamstrings only"},{key:"core",label:"🎯 Core & Upper",desc:"Emphasise core + upper body"}];
+  const focusOpts=[{key:"balanced",label:"⚖️ Balanced",desc:"Full body rotation as normal"},{key:"upper",label:"💪 Upper Body Phase",desc:"Chest, back, shoulders, arms only"},{key:"lower",label:"🦵 Lower Body Phase",desc:"Legs, glutes, hamstrings only"},{key:"core",label:"🎯 Core & Upper",desc:"Emphasise core + upper body"},{key:"advanced",label:"🔬 Advanced — Pick Muscles",desc:"Hand-pick exact muscle groups to target"}];
   const restrictions=[{key:"skipKnees",label:"🦵 Knees playing up",desc:"Avoid knee-loaded exercises"},{key:"skipAnkle",label:"🦶 Ankle playing up",desc:"No calf raises, lunges, sled, single-leg"},{key:"skipShoulders",label:"💆 Shoulder niggle",desc:"No overhead pressing or lateral raises"},{key:"skipBack",label:"🔙 Lower back sore",desc:"Skip rows and back extensions"},{key:"skipChest",label:"🫁 Chest / pec issue",desc:"No chest pressing or pec fly"}];
   function tog(k){setLocal(p=>({...p,[k]:!p[k]}));}
-
-  const durIdx=DURATION_OPTIONS.indexOf(local.workoutDuration||45);
-  const safeDurIdx=durIdx>=0?durIdx:2; // default to 45min (index 2)
-  const durCfg=getDurationConfig(local.workoutDuration||45);
-
-  // Slider background fill %
-  const sliderPct=(safeDurIdx/(DURATION_OPTIONS.length-1))*100;
-
-  function handleDurationSlider(e){
-    const idx=parseInt(e.target.value);
-    const mins=DURATION_OPTIONS[idx];
-    const updated={...local,workoutDuration:mins};
-    setLocal(updated);
-    // Instant rebuild — no save button needed
-    if(onDurationChange) onDurationChange(updated);
+  function setFocus(key){
+    if(key==="advanced")setLocal(p=>({...p,trainingFocus:"balanced",advancedMode:true}));
+    else setLocal(p=>({...p,trainingFocus:key,advancedMode:false}));
   }
+  function togMuscle(k){setLocal(p=>({...p,targetMuscles:p.targetMuscles?.includes(k)?p.targetMuscles.filter(m=>m!==k):[...(p.targetMuscles||[]),k]}));}
+  const cats=[{key:"push",label:"PUSH"},{key:"pull",label:"PULL"},{key:"legs",label:"LEGS"},{key:"core",label:"CORE"}];
 
   return(<div style={{paddingTop:24,animation:"fadeIn 0.4s ease",paddingBottom:40}}>
     <div style={{fontFamily:"Bebas Neue",fontSize:"2.2rem",color:"#f0f0f0",letterSpacing:"0.05em",marginBottom:4}}>FOCUS & RESTRICTIONS</div>
     <div style={{fontSize:"0.72rem",color:"#666",marginBottom:20}}>Set your training focus or flag an injury — the AI adjusts every workout to match</div>
 
-    {/* ── DURATION SLIDER ─────────────────────────────── */}
-    <div style={{background:"#111",border:`1.5px solid ${durCfg.color}55`,borderRadius:12,padding:"18px 16px",marginBottom:14}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
-        <div>
-          <div style={{fontSize:"0.65rem",color:durCfg.color,fontWeight:700,letterSpacing:"0.1em",marginBottom:4}}>⏱ WORKOUT DURATION</div>
-          <div style={{display:"flex",alignItems:"baseline",gap:8}}>
-            <div style={{fontFamily:"Bebas Neue",fontSize:"2.6rem",color:durCfg.color,lineHeight:1}}>{local.workoutDuration||45}</div>
-            <div style={{fontSize:"0.72rem",color:"#888",fontWeight:600}}>min</div>
-            <div style={{fontSize:"0.72rem",color:durCfg.color,fontWeight:700,background:`${durCfg.color}18`,padding:"2px 8px",borderRadius:20,marginLeft:4}}>{durCfg.emoji} {durCfg.label}</div>
-          </div>
-          <div style={{fontSize:"0.64rem",color:"#666",marginTop:3}}>{durCfg.desc}</div>
-        </div>
-      </div>
-      {/* Slider */}
-      <div style={{position:"relative",paddingBottom:22}}>
-        <input
-          type="range"
-          className="dur-slider"
-          min={0} max={DURATION_OPTIONS.length-1} step={1}
-          value={safeDurIdx}
-          onChange={handleDurationSlider}
-          style={{background:`linear-gradient(to right,${durCfg.color} 0%,${durCfg.color} ${sliderPct}%,#2a2a2a ${sliderPct}%,#2a2a2a 100%)`}}
-        />
-        {/* Tick labels */}
-        <div style={{display:"flex",justifyContent:"space-between",position:"absolute",bottom:0,left:0,right:0,paddingTop:4}}>
-          {DURATION_OPTIONS.map((m,i)=>(
-            <div key={m} style={{fontSize:"0.55rem",color:i===safeDurIdx?durCfg.color:"#3a3a3a",fontWeight:i===safeDurIdx?700:400,textAlign:"center",minWidth:20,transition:"color 0.2s"}}>{m}m</div>
-          ))}
-        </div>
-      </div>
-      {!isFirstRun&&<div style={{fontSize:"0.6rem",color:"#555",textAlign:"center",marginTop:4}}>⚡ Workout rebuilds instantly when you change this</div>}
-    </div>
-
     {/* ── TRAINING FOCUS ─────────────────────────────── */}
     <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:12,padding:"16px",marginBottom:14}}>
       <div style={{fontSize:"0.65rem",color:"#e31837",fontWeight:700,letterSpacing:"0.1em",marginBottom:12}}>🎯 TRAINING FOCUS</div>
-      <div style={{display:"flex",flexDirection:"column",gap:8}}>{focusOpts.map(opt=>{const active=local.trainingFocus===opt.key;return(<button key={opt.key} onClick={()=>setLocal(p=>({...p,trainingFocus:opt.key}))} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",borderRadius:10,border:`1.5px solid ${active?"#e31837":"#252525"}`,background:active?"#1a0a0d":"#161616",cursor:"pointer",textAlign:"left"}}>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>{focusOpts.map(opt=>{const active=opt.key==="advanced"?local.advancedMode:(local.trainingFocus===opt.key&&!local.advancedMode);return(<button key={opt.key} onClick={()=>setFocus(opt.key)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",borderRadius:10,border:`1.5px solid ${active?"#e31837":"#252525"}`,background:active?"#1a0a0d":"#161616",cursor:"pointer",textAlign:"left"}}>
         <div><div style={{fontSize:"0.82rem",color:active?"#f0f0f0":"#888",fontWeight:600}}>{opt.label}</div><div style={{fontSize:"0.65rem",color:"#555",marginTop:2}}>{opt.desc}</div></div>
         <div style={{width:18,height:18,borderRadius:"50%",border:`2px solid ${active?"#e31837":"#333"}`,background:active?"#e31837":"transparent",flexShrink:0}}/>
       </button>);})}
       </div>
+      {/* Advanced muscle grid */}
+      {local.advancedMode&&(<div style={{marginTop:16,paddingTop:14,borderTop:"1px solid #1e1e1e"}}>
+        <div style={{fontSize:"0.62rem",color:"#a78bfa",fontWeight:700,letterSpacing:"0.1em",marginBottom:10}}>SELECT MUSCLES TO TARGET</div>
+        {cats.map(cat=>{
+          const muscles=MUSCLE_GROUPS.filter(m=>m.cat===cat.key);
+          return(<div key={cat.key} style={{marginBottom:10}}>
+            <div style={{fontSize:"0.56rem",color:"#444",fontWeight:700,letterSpacing:"0.1em",marginBottom:6}}>{cat.label}</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{muscles.map(m=>{const sel=local.targetMuscles?.includes(m.key);return(
+              <button key={m.key} onClick={()=>togMuscle(m.key)} style={{padding:"5px 12px",borderRadius:20,border:`1.5px solid ${sel?"#a78bfa":"#252525"}`,background:sel?"#1a0d2e":"#161616",color:sel?"#a78bfa":"#555",cursor:"pointer",fontSize:"0.68rem",fontWeight:sel?700:400,transition:"all 0.15s"}}>{m.label}</button>
+            );})}</div>
+          </div>);
+        })}
+        {(local.targetMuscles||[]).length===0&&<div style={{fontSize:"0.62rem",color:"#3a3a3a",marginTop:4}}>Tap muscles above to target them</div>}
+        {(local.targetMuscles||[]).length>0&&<div style={{fontSize:"0.62rem",color:"#a78bfa",marginTop:4}}>✓ {local.targetMuscles.length} muscle{local.targetMuscles.length!==1?"s":""} targeted</div>}
+      </div>)}
     </div>
     <div style={{background:"#111",border:`1.5px solid ${local.deload?"#ffa040":"#1e1e1e"}`,borderRadius:12,padding:"16px",marginBottom:14,cursor:"pointer"}} onClick={()=>tog("deload")}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -703,7 +834,7 @@ function FocusView({focus,onUpdate,onApply,onDurationChange,isFirstRun=false}){
       <textarea value={local.customNote} onChange={e=>setLocal(p=>({...p,customNote:e.target.value}))} placeholder="e.g. left elbow sore, just did a long run..." maxLength={150} rows={2} style={{width:"100%",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:8,padding:"10px 12px",color:"#ccc",fontSize:"0.75rem",resize:"none",outline:"none",lineHeight:1.5}}/>
     </div>
     {!isFirstRun&&<AIKeyCard/>}
-    <button onClick={()=>{onUpdate(local);onApply(local);}} style={{width:"100%",height:52,borderRadius:14,border:"none",cursor:"pointer",fontFamily:"Bebas Neue",fontSize:"1.25rem",letterSpacing:"0.1em",background:isFirstRun||changed?"linear-gradient(135deg,#e31837,#ff4d6a)":"#252525",color:isFirstRun||changed?"#fff":"#444",transition:"all 0.3s",boxShadow:isFirstRun||changed?"0 4px 26px rgba(227,24,55,0.3)":"none"}}>
+    <button onClick={()=>{if(isFirstRun||changed){onUpdate(local);onApply(local);}}} style={{width:"100%",height:52,borderRadius:14,border:"none",cursor:isFirstRun||changed?"pointer":"default",fontFamily:"Bebas Neue",fontSize:"1.25rem",letterSpacing:"0.1em",background:isFirstRun||changed?"linear-gradient(135deg,#e31837,#ff4d6a)":"#252525",color:isFirstRun||changed?"#fff":"#444",transition:"all 0.3s",boxShadow:isFirstRun||changed?"0 4px 26px rgba(227,24,55,0.3)":"none"}}>
       {isFirstRun?"✓ SAVE & BUILD MY FIRST WORKOUT":changed?"✓ SAVE & REBUILD WORKOUT":"NO CHANGES"}
     </button>
   </div>);
@@ -774,6 +905,11 @@ function App(){
   const[showDayPicker,setShowDayPicker]=useState(false);
   const[confirmModal,setConfirmModal]=useState(null); // {message,subtext,confirmLabel,onConfirm}
   const[showProfileSetup,setShowProfileSetup]=useState(false);
+  const[showDurationPicker,setShowDurationPicker]=useState(false);
+  const[pendingKickoff,setPendingKickoff]=useState(null); // {state, overrideDayIdx}
+  const[postFeedback,setPostFeedback]=useState({feeling:null,note:""});
+  const[showWarmup,setShowWarmup]=useState(false);
+  const[showTipId,setShowTipId]=useState(null);
   const restRef=useRef(null);
   const hasGenerated=useRef(false);
 
@@ -803,6 +939,8 @@ function App(){
           if(!p.focus)p.focus={...DEFAULT_FOCUS};
           if(p.focus.skipAnkle===undefined)p.focus.skipAnkle=false;
           if(p.focus.workoutDuration===undefined)p.focus.workoutDuration=45;
+          if(p.focus.advancedMode===undefined)p.focus.advancedMode=false;
+          if(!p.focus.targetMuscles)p.focus.targetMuscles=[];
           if(!p.exerciseHistory)p.exerciseHistory={};
           localStorage.setItem(STORAGE_KEY,JSON.stringify(p));
           localStorage.removeItem(OLD_STORAGE_KEY);
@@ -814,6 +952,8 @@ function App(){
         if(!p.focus)p.focus={...DEFAULT_FOCUS};
         if(p.focus.skipAnkle===undefined)p.focus.skipAnkle=false;
         if(p.focus.workoutDuration===undefined)p.focus.workoutDuration=45;
+        if(p.focus.advancedMode===undefined)p.focus.advancedMode=false;
+        if(!p.focus.targetMuscles)p.focus.targetMuscles=[];
         if(p.focusConfigured===undefined)p.focusConfigured=false;
         if(!p.exerciseHistory)p.exerciseHistory={};
         if(!p.profile)p.profile={...DEFAULT_PROFILE};
@@ -836,17 +976,19 @@ function App(){
   function persist(ns){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(ns));}catch{}setAppState(ns);return ns;}
   function updateFocus(f){return persist({...appState,focus:f});}
 
-  async function kickoff(state,overrideDayIdx=null){
-    setGenerating(true);setDone(false);setWorkout(null);setSummary(null);
+  async function kickoff(state,overrideDayIdx=null,showPicker=false){
+    if(showPicker){setPendingKickoff({state,overrideDayIdx});setShowDurationPicker(true);return;}
+    setGenerating(true);setDone(false);setWorkout(null);setSummary(null);setPostFeedback({feeling:null,note:""});setShowWarmup(false);
     const profile=state.profile||DEFAULT_PROFILE;
     const seq=getDaySeq(profile);
     const idx=overrideDayIdx!==null?overrideDayIdx:(state.cycleIdx%seq.length);
     const dayType=DAY_TYPES.find(d=>d.id===seq[idx%seq.length])||DAY_TYPES[0];
-    const recentIds=state.history.slice(0,3).flatMap(h=>h.exerciseIds||[]);
+    const recentIds=state.history.slice(0,5).flatMap(h=>h.exerciseIds||[]);
     const perfNotes=buildPerfNotes(state.history,state.weights);
+    const lastFeeling=state.history[0]?.sessionFeeling||null;
     const focus=state.focus||DEFAULT_FOCUS;
     let w;
-    try{w=await tryAIWorkout(dayType,state.sessions+1,recentIds,perfNotes,state.weights,focus,profile);}
+    try{w=await tryAIWorkout(dayType,state.sessions+1,recentIds,perfNotes,state.weights,focus,profile,lastFeeling);}
     catch{w=getFallback(dayType.id,state.sessions,recentIds,focus);}
     // STORE dayIdx on workout so finish knows which day we actually did
     setWorkout({...w,dayType,dayIdx:idx});
@@ -859,6 +1001,18 @@ function App(){
     });
     setSessionWeights(wts);setSessionSets(sets);setSessionRatings(ratings);setSessionSetWeights(setWts);
     setGenerating(false);
+  }
+
+  function saveFeedback(feeling,note){
+    if(!feeling)return;
+    setAppState(prev=>{
+      if(!prev||!prev.history.length)return prev;
+      const h=[...prev.history];
+      h[0]={...h[0],sessionFeeling:{feeling,note}};
+      const ns={...prev,history:h};
+      try{localStorage.setItem(STORAGE_KEY,JSON.stringify(ns));}catch{}
+      return ns;
+    });
   }
 
   async function remixExercise(exId){
@@ -914,7 +1068,7 @@ function App(){
       if(!newExHist[ex.id])newExHist[ex.id]=[];
       newExHist[ex.id]=[...newExHist[ex.id],histEntry].slice(-50);
 
-      summaryRows.push({name:ex.name,equipNum:ex.equipNum,setsLogged:logged.length,totalSets:ex.sets,avgReps:avgReps||null,targetReps:ex.reps,weight:w,nextWeight:nextW,delta:dec.delta,deltaColor:dec.color,sets:sets.map((r,i)=>({reps:r,weight:sessionSetWeights[ex.id]?.[i]||null}))});
+      summaryRows.push({name:ex.name,equipNum:ex.equipNum,muscleGroup:ex.muscleGroup,setsLogged:logged.length,totalSets:ex.sets,avgReps:avgReps||null,targetReps:ex.reps,weight:w,nextWeight:nextW,delta:dec.delta,deltaColor:dec.color,sets:sets.map((r,i)=>({reps:r,weight:sessionSetWeights[ex.id]?.[i]||null}))});
     });
 
     const entry={date:new Date().toLocaleDateString("en-AU"),time:new Date().toLocaleTimeString("en-AU",{hour:"2-digit",minute:"2-digit"}),dayId:workout.dayType.id,dayName:workout.dayType.name,sessionTitle:workout.sessionTitle,exerciseIds:workout.exercises.map(e=>e.id),weights:{...sessionWeights},repData:Object.fromEntries(workout.exercises.map(ex=>[ex.id,sessionSets[ex.id]])),ratingData:Object.fromEntries(workout.exercises.map(ex=>[ex.id,sessionRatings[ex.id]])),wasAI:!workout.isFallback,focusSnapshot:{...(appState.focus||DEFAULT_FOCUS)}};
@@ -950,7 +1104,7 @@ function App(){
   }
 
   if(!appState.focusConfigured){
-    if(view==="focusSetup")return(<div style={{minHeight:"100vh",background:"#0e0e0e",fontFamily:"'DM Sans',sans-serif",color:"#f0f0f0"}}><style>{appStyle}</style><div style={{background:"#0e0e0e",borderBottom:"1px solid #1c1c1c",padding:"0 16px"}}><div style={{maxWidth:600,margin:"0 auto",height:56,display:"flex",alignItems:"center",gap:10}}><SnapLogo height={26}/><div style={{width:1,height:18,background:"#2a2a2a"}}/><div><div style={{fontFamily:"Bebas Neue",fontSize:"0.95rem",color:"#ccc",letterSpacing:"0.12em"}}>WATAGAN PARK</div><div style={{fontSize:"0.58rem",color:"#444",marginTop:2}}>First-time setup</div></div></div></div><div style={{maxWidth:600,margin:"0 auto",padding:"0 16px"}}><FocusView focus={appState.focus||DEFAULT_FOCUS} onUpdate={updateFocus} isFirstRun={true} onApply={(nf)=>{const ns=persist({...appState,focus:nf,focusConfigured:true});hasGenerated.current=false;setView("workout");kickoff(ns);}}/></div></div>);
+    if(view==="focusSetup")return(<div style={{minHeight:"100vh",background:"#0e0e0e",fontFamily:"'DM Sans',sans-serif",color:"#f0f0f0"}}><style>{appStyle}</style><div style={{background:"#0e0e0e",borderBottom:"1px solid #1c1c1c",padding:"0 16px"}}><div style={{maxWidth:600,margin:"0 auto",height:56,display:"flex",alignItems:"center",gap:10}}><SnapLogo height={26}/><div style={{width:1,height:18,background:"#2a2a2a"}}/><div><div style={{fontFamily:"Bebas Neue",fontSize:"0.95rem",color:"#ccc",letterSpacing:"0.12em"}}>WATAGAN PARK</div><div style={{fontSize:"0.58rem",color:"#444",marginTop:2}}>First-time setup</div></div></div></div><div style={{maxWidth:600,margin:"0 auto",padding:"0 16px"}}><FocusView focus={appState.focus||DEFAULT_FOCUS} onUpdate={updateFocus} isFirstRun={true} onApply={(nf)=>{const ns=persist({...appState,focus:nf,focusConfigured:true});hasGenerated.current=false;setView("workout");kickoff(ns,null,true);}}/></div></div>);
     return <SetupGate onBegin={()=>setView("focusSetup")}/>;
   }
 
@@ -963,7 +1117,7 @@ function App(){
   const completedSets=Object.values(sessionSets).flat().filter(r=>r!==null).length;
   const pct=totalSets>0?(completedSets/totalSets)*100:0;
   const allComplete=totalSets>0&&completedSets===totalSets;
-  const activeBadges=[focus.trainingFocus!=="balanced"&&{label:focus.trainingFocus==="upper"?"💪 Upper":focus.trainingFocus==="lower"?"🦵 Lower":"🎯 Core",color:"#e31837"},focus.deload&&{label:"📉 Deload",color:"#ffa040"},focus.skipKnees&&{label:"🦵 No Knees",color:"#ffd740"},focus.skipAnkle&&{label:"🦶 No Ankle",color:"#ffd740"},focus.skipShoulders&&{label:"💆 No Shoulder",color:"#ffd740"},focus.skipBack&&{label:"🔙 No Back",color:"#ffd740"},focus.skipChest&&{label:"🫁 No Chest",color:"#ffd740"}].filter(Boolean);
+  const activeBadges=[focus.advancedMode&&focus.targetMuscles?.length?{label:`🔬 ${focus.targetMuscles.length} muscles`,color:"#a78bfa"}:focus.trainingFocus!=="balanced"?{label:focus.trainingFocus==="upper"?"💪 Upper":focus.trainingFocus==="lower"?"🦵 Lower":"🎯 Core",color:"#e31837"}:null,focus.deload&&{label:"📉 Deload",color:"#ffa040"},focus.skipKnees&&{label:"🦵 No Knees",color:"#ffd740"},focus.skipAnkle&&{label:"🦶 No Ankle",color:"#ffd740"},focus.skipShoulders&&{label:"💆 No Shoulder",color:"#ffd740"},focus.skipBack&&{label:"🔙 No Back",color:"#ffd740"},focus.skipChest&&{label:"🫁 No Chest",color:"#ffd740"}].filter(Boolean);
 
   return(<div style={{minHeight:"100vh",background:"#0e0e0e",fontFamily:"'DM Sans',sans-serif",color:"#f0f0f0",paddingBottom:130}}>
     <style>{appStyle}</style>
@@ -971,6 +1125,7 @@ function App(){
     {histModal&&<ExerciseHistoryModal exId={histModal.id} exName={histModal.name} history={appState.exerciseHistory||{}} onClose={()=>setHistModal(null)}/>}
     {showDayPicker&&<DayPickerModal currentIdx={appState.cycleIdx%daySeq.length} onPick={(i)=>{hasGenerated.current=true;kickoff(appState,i);}} onClose={()=>setShowDayPicker(false)}/>}
     {confirmModal&&<ConfirmModal message={confirmModal.message} subtext={confirmModal.subtext} confirmLabel={confirmModal.confirmLabel||"Confirm"} confirmColor={confirmModal.confirmColor||"#e31837"} onConfirm={()=>{confirmModal.onConfirm();setConfirmModal(null);}} onCancel={()=>setConfirmModal(null)}/>}
+    {showDurationPicker&&<DurationPickerModal currentDuration={(pendingKickoff?.state||appState)?.focus?.workoutDuration||45} onPick={(mins)=>{const st=pendingKickoff?.state||appState;const ns=persist({...st,focus:{...(st.focus||DEFAULT_FOCUS),workoutDuration:mins}});setShowDurationPicker(false);setPendingKickoff(null);hasGenerated.current=true;kickoff(ns,pendingKickoff?.overrideDayIdx);}} onClose={()=>{setShowDurationPicker(false);setPendingKickoff(null);}}/>}
 
     {/* HEADER */}
     <div style={{background:"#0e0e0e",position:"sticky",top:0,zIndex:100,borderBottom:"1px solid #1c1c1c"}}>
@@ -1004,12 +1159,12 @@ function App(){
                 <div style={{display:"flex",alignItems:"baseline",gap:10,flexWrap:"wrap"}}><div style={{fontFamily:"Bebas Neue",fontSize:"2.8rem",color:dayType.color,lineHeight:1,letterSpacing:"0.05em"}}>{dayType.label}</div><div style={{fontFamily:"Bebas Neue",fontSize:"1.4rem",color:"#f0f0f0",lineHeight:1,letterSpacing:"0.05em"}}>{dayType.name.toUpperCase()}</div></div>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginTop:3}}>
                   <div style={{fontFamily:"Bebas Neue",fontSize:"1rem",color:"#777",letterSpacing:"0.08em"}}>{workout.sessionTitle?.toUpperCase()}</div>
-                  <span onClick={()=>setView("focus")} style={{fontSize:"0.6rem",color:getDurationConfig(focus.workoutDuration||45).color,background:`${getDurationConfig(focus.workoutDuration||45).color}18`,border:`1px solid ${getDurationConfig(focus.workoutDuration||45).color}44`,padding:"2px 8px",borderRadius:20,cursor:"pointer",whiteSpace:"nowrap",fontWeight:700}}>⏱ {focus.workoutDuration||45}min</span>
+                  <span onClick={()=>kickoff(appState,workout?.dayIdx,true)} style={{fontSize:"0.6rem",color:getDurationConfig(focus.workoutDuration||45).color,background:`${getDurationConfig(focus.workoutDuration||45).color}18`,border:`1px solid ${getDurationConfig(focus.workoutDuration||45).color}44`,padding:"2px 8px",borderRadius:20,cursor:"pointer",whiteSpace:"nowrap",fontWeight:700}}>⏱ {focus.workoutDuration||45}min ✎</span>
                 </div>
               </div>
               <div style={{display:"flex",gap:6,flexShrink:0}}>
                 <button onClick={()=>setShowDayPicker(true)} style={{background:"#1a1a1a",border:"1px solid #2e2e2e",color:"#4fc3f7",borderRadius:10,padding:"8px 10px",cursor:"pointer",textAlign:"center",fontSize:"0.6rem",lineHeight:1.5}}><div style={{fontSize:"1rem"}}>📅</div><div>day</div></button>
-                <button onClick={()=>{hasGenerated.current=true;kickoff(appState);}} style={{background:"#1a1a1a",border:"1px solid #2e2e2e",color:"#777",borderRadius:10,padding:"8px 10px",cursor:"pointer",textAlign:"center",fontSize:"0.6rem",lineHeight:1.5}}><div style={{fontSize:"1.1rem"}}>🔀</div><div>remix</div></button>
+                <button onClick={()=>{hasGenerated.current=true;kickoff(appState,null,true);}} style={{background:"#1a1a1a",border:"1px solid #2e2e2e",color:"#777",borderRadius:10,padding:"8px 10px",cursor:"pointer",textAlign:"center",fontSize:"0.6rem",lineHeight:1.5}}><div style={{fontSize:"1.1rem"}}>🔀</div><div>remix</div></button>
               </div>
             </div>
             <div style={{marginTop:12,background:"#141414",border:"1px solid #252525",borderRadius:12,padding:"12px 14px"}}>
@@ -1021,6 +1176,15 @@ function App(){
             {(()=>{const estSecs=workout.exercises.reduce((t,ex)=>{const rp=["Quads","Glutes","Hamstrings","Back","Lats","Chest","Upper Chest","Lower Chest"].includes(ex.muscleGroup)?90:60;return t+(ex.sets*45)+((ex.sets-1)*rp);},0);const em=Math.round(estSecs/60);return(<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:"0.68rem",color:"#444",fontWeight:700,letterSpacing:"0.08em"}}>PROGRESS</span><span style={{fontSize:"0.6rem",color:"#333",background:"#1a1a1a",border:"1px solid #252525",padding:"1px 7px",borderRadius:20}}>⏱ ~{em} min</span></div><span style={{fontSize:"0.68rem",color:pct===100?"#69f0ae":"#e31837",fontWeight:700}}>{completedSets}/{totalSets} sets</span></div>);})()}
             <div style={{height:5,background:"#1a1a1a",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:pct===100?"linear-gradient(90deg,#69f0ae,#00e676)":"linear-gradient(90deg,#e31837,#ff6b6b)",borderRadius:3,transition:"width 0.4s ease"}}/></div>
           </div>
+
+          {/* Warmup Section */}
+          {(()=>{const moves=getWarmupMoves(workout.exercises);return(<div style={{marginBottom:14,background:"#111",border:"1px solid #1e1e1e",borderRadius:12,overflow:"hidden"}}>
+            <button onClick={()=>setShowWarmup(p=>!p)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",background:"transparent",border:"none",cursor:"pointer"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:"1rem"}}>🤸</span><div style={{textAlign:"left"}}><div style={{fontSize:"0.72rem",fontWeight:700,color:"#69f0ae"}}>WARM-UP STRETCHES</div><div style={{fontSize:"0.58rem",color:"#444"}}>{moves.length} movements · do these before you start</div></div></div>
+              <span style={{color:"#444",fontSize:"0.8rem"}}>{showWarmup?"▲":"▼"}</span>
+            </button>
+            {showWarmup&&(<div style={{padding:"0 14px 14px"}}>{moves.map((m,i)=><div key={i} style={{borderTop:"1px solid #1c1c1c",paddingTop:10,marginTop:10}}><div style={{fontSize:"0.72rem",fontWeight:600,color:"#ccc"}}>{m.name} <span style={{color:"#444",fontWeight:400}}>— {m.dur}</span></div><div style={{fontSize:"0.62rem",color:"#555",marginTop:3}}>"{m.cue}"</div></div>)}</div>)}
+          </div>);})()}
 
           {workout.exercises.map((ex,ei)=>{
             const isRemixing=remixingId===ex.id;
@@ -1042,7 +1206,13 @@ function App(){
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
                   <div style={{flex:1,paddingRight:10}}>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}><span style={{background:"#e31837",color:"#fff",fontSize:"0.58rem",fontWeight:700,padding:"2px 8px",borderRadius:4,whiteSpace:"nowrap"}}>STATION #{ex.equipNum}</span>{ex.muscleGroup&&<span style={{background:"#252525",color:"#666",fontSize:"0.54rem",padding:"2px 6px",borderRadius:4}}>{ex.muscleGroup}</span>}{allLogged&&<span style={{color:"#69f0ae",fontSize:"0.72rem"}}>✓</span>}</div>
-                    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:2}}><div style={{fontFamily:"Bebas Neue",fontSize:"1.25rem",letterSpacing:"0.04em",color:allLogged?"#69f0ae":"#f0f0f0",lineHeight:1.2}}>{ex.name.toUpperCase()}</div><button onClick={()=>remixExercise(ex.id)} style={{background:"#1e1e2e",border:"1px solid #2a2a45",color:"#7c7cff",borderRadius:7,padding:"3px 8px",cursor:"pointer",fontSize:"0.58rem",display:"flex",alignItems:"center",gap:3,whiteSpace:"nowrap"}}><span>🔀</span><span>busy?</span></button></div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:2}}>
+                      <div style={{fontFamily:"Bebas Neue",fontSize:"1.25rem",letterSpacing:"0.04em",color:allLogged?"#69f0ae":"#f0f0f0",lineHeight:1.2}}>{ex.name.toUpperCase()}</div>
+                      <button onClick={()=>setShowTipId(showTipId===ex.id?null:ex.id)} style={{background:"#1a1a1a",border:"1px solid #252525",color:"#555",borderRadius:7,padding:"3px 7px",cursor:"pointer",fontSize:"0.6rem",whiteSpace:"nowrap"}}>ℹ️</button>
+                      <button onClick={()=>remixExercise(ex.id)} style={{background:"#1e1e2e",border:"1px solid #2a2a45",color:"#7c7cff",borderRadius:7,padding:"3px 8px",cursor:"pointer",fontSize:"0.58rem",display:"flex",alignItems:"center",gap:3,whiteSpace:"nowrap"}}><span>🔀</span><span>busy?</span></button>
+                    </div>
+                    {ex.variation&&ex.variation!=="Standard"&&(<div style={{display:"inline-flex",alignItems:"center",gap:4,background:"#1a1800",border:"1px solid #ffd74033",borderRadius:6,padding:"2px 8px",marginBottom:4}}><span style={{fontSize:"0.7rem"}}>⏱</span><span style={{fontSize:"0.6rem",color:"#ffd740",fontWeight:600}}>{ex.variation}</span></div>)}
+                    {showTipId===ex.id&&(()=>{const tip=EXERCISE_TIPS[ex.id];return tip?(<div style={{background:"#0d1520",border:"1px solid #1c3050",borderRadius:8,padding:"8px 12px",marginBottom:4}}><div style={{fontSize:"0.62rem",color:"#4fc3f7",fontWeight:700,marginBottom:2}}>{tip.muscle}</div><div style={{fontSize:"0.64rem",color:"#888",lineHeight:1.5}}>"{tip.cue}"</div>{ex.variation&&ex.variation!=="Standard"&&<div style={{fontSize:"0.6rem",color:"#ffd740",marginTop:4}}>⏱ {ex.variation}: apply this technique to each set</div>}</div>):null;})()}
                     <div style={{fontSize:"0.65rem",color:"#555"}}>{ex.sets} sets × {ex.reps} reps target</div>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,minWidth:100}}>
@@ -1114,14 +1284,32 @@ function App(){
           ))}
         </div>
 
+        {/* Cool-down stretches */}
+        {(()=>{const stretches=getStretchRoutine(summary.rows.map(r=>({muscleGroup:r.muscleGroup||""})));return stretches.length>0&&(<div style={{background:"#0d150d",border:"1px solid #1a3a1a",borderRadius:14,padding:"16px",marginBottom:14}}>
+          <div style={{fontSize:"0.62rem",color:"#69f0ae",fontWeight:700,letterSpacing:"0.1em",marginBottom:10}}>🧘 COOL-DOWN STRETCHES</div>
+          {stretches.map((s,i)=><div key={i} style={{borderTop:i?`1px solid #1a2a1a`:"none",paddingTop:i?10:0,marginTop:i?10:0}}><div style={{fontSize:"0.72rem",fontWeight:600,color:"#ccc"}}>{s.name} <span style={{color:"#444",fontWeight:400}}>— {s.dur}</span></div><div style={{fontSize:"0.62rem",color:"#555",marginTop:3}}>"{s.cue}"</div></div>)}
+        </div>);})()}
+
         {/* Next session */}
         <div style={{background:"#0d1520",border:"1px solid #1c3050",borderRadius:14,padding:"14px 18px",marginBottom:16,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div><div style={{fontSize:"0.62rem",color:"#4fc3f7",fontWeight:700,letterSpacing:"0.1em",marginBottom:4}}>NEXT UP</div><div style={{fontFamily:"Bebas Neue",fontSize:"1.4rem",color:"#f0f0f0",letterSpacing:"0.05em"}}>{summary.nextDayType.label} — {summary.nextDayType.name.toUpperCase()}</div></div>
           <div style={{width:12,height:12,borderRadius:"50%",background:summary.nextDayType.color}}/>
         </div>
 
-        {/* FIX: "Back to Tracker" now properly resets done + kicks off new workout */}
-        <button onClick={()=>{setDone(false);hasGenerated.current=true;kickoff(appState);}} style={{width:"100%",height:52,borderRadius:14,border:"none",cursor:"pointer",fontFamily:"Bebas Neue",fontSize:"1.1rem",letterSpacing:"0.08em",background:"linear-gradient(135deg,#e31837,#ff4d6a)",color:"#fff",boxShadow:"0 4px 20px rgba(227,24,55,0.3)"}}>
+        {/* Post-workout feedback */}
+        <div style={{background:"#141414",border:"1px solid #222",borderRadius:14,padding:"16px",marginBottom:14}}>
+          <div style={{fontSize:"0.62rem",color:"#4fc3f7",fontWeight:700,letterSpacing:"0.1em",marginBottom:10}}>💬 HOW DID YOU FEEL TODAY?</div>
+          <div style={{display:"flex",gap:8,marginBottom:postFeedback.feeling?12:0}}>
+            {[{key:"strong",emoji:"💪",label:"Strong"},{key:"good",emoji:"👍",label:"Good"},{key:"ok",emoji:"😐",label:"OK"},{key:"tired",emoji:"😴",label:"Tired"}].map(f=>{const sel=postFeedback.feeling===f.key;return(<button key={f.key} onClick={()=>setPostFeedback(p=>({...p,feeling:f.key}))} style={{flex:1,padding:"10px 4px",borderRadius:10,border:`1.5px solid ${sel?"#4fc3f7":"#222"}`,background:sel?"#0d1520":"#111",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+              <span style={{fontSize:"1.3rem"}}>{f.emoji}</span>
+              <span style={{fontSize:"0.58rem",color:sel?"#4fc3f7":"#555",fontWeight:sel?700:400}}>{f.label}</span>
+            </button>);})}
+          </div>
+          {postFeedback.feeling&&(<input value={postFeedback.note} onChange={e=>setPostFeedback(p=>({...p,note:e.target.value}))} placeholder="Any notes? (optional)" maxLength={100} style={{width:"100%",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:8,padding:"9px 12px",color:"#ccc",fontSize:"0.75rem",outline:"none"}}/>)}
+          {!postFeedback.feeling&&<div style={{fontSize:"0.6rem",color:"#333",marginTop:4}}>Tap to rate — the AI uses this next session</div>}
+        </div>
+
+        <button onClick={()=>{if(postFeedback.feeling)saveFeedback(postFeedback.feeling,postFeedback.note);setDone(false);hasGenerated.current=true;kickoff(appState,null,true);}} style={{width:"100%",height:52,borderRadius:14,border:"none",cursor:"pointer",fontFamily:"Bebas Neue",fontSize:"1.1rem",letterSpacing:"0.08em",background:"linear-gradient(135deg,#e31837,#ff4d6a)",color:"#fff",boxShadow:"0 4px 20px rgba(227,24,55,0.3)"}}>
           START NEXT SESSION →
         </button>
       </div>)}
@@ -1163,11 +1351,6 @@ function App(){
           </div>
         </div>
         <FocusView focus={focus} onUpdate={updateFocus} isFirstRun={false}
-          onDurationChange={(newFocus)=>{
-            const ns=persist({...appState,focus:newFocus});
-            hasGenerated.current=true;kickoff(ns);
-            setView("workout");
-          }}
           onApply={(nf)=>{const ns=updateFocus(nf);hasGenerated.current=false;setView("workout");kickoff(ns);}}/>
       </>)}
 
