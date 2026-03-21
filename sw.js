@@ -5,7 +5,7 @@ const CACHE_NAME = "snapfit-v2";
 const STATIC_ASSETS = [
   "./index.html",
   "./manifest.json",
-  "./gym-map.jpg"
+  "./gym-map.JPG"
 ];
 
 const CDN_ASSETS = [
@@ -22,13 +22,13 @@ self.addEventListener("install", event => {
       // Cache local assets (required)
       const localPromise = cache.addAll(
         STATIC_ASSETS.filter(url => {
-          // gym-map.jpg is optional — don't fail install if missing
+          // gym-map.JPG is optional — don't fail install if missing
           if (url.includes("gym-map")) return false;
           return true;
         })
       );
       // Cache gym-map separately so it doesn't block install
-      const mapPromise = cache.add("./gym-map.jpg").catch(() => {});
+      const mapPromise = cache.add("./gym-map.JPG").catch(() => {});
       // Cache CDN assets separately so they don't block install
       const cdnPromise = Promise.all(
         CDN_ASSETS.map(url => cache.add(url).catch(() => {}))
