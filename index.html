@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>SnapFit Tracker</title>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black"/>
+  <meta name="apple-mobile-web-app-title" content="SnapFit"/>
+  <meta name="theme-color" content="#0e0e0e"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Crect width='180' height='180' rx='38' fill='%23e31837'/%3E%3Ctext x='18' y='85' font-family='Arial Black,Arial' font-weight='900' font-size='54' fill='white'%3Esnap%3C/text%3E%3Ctext x='8' y='150' font-family='Arial Black,Arial' font-weight='900' font-size='50' fill='white'%3Efitness%3C/text%3E%3C/svg%3E"/>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>html,body{margin:0;padding:0;background:#0e0e0e;height:100%;}body{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);}</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const{useState,useEffect,useRef}=React;
+const STORAGE_KEY="snapfit_v10";
+const appStyle=`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap');*{box-sizing:border-box;margin:0;padding:0;}body{background:#0e0e0e;}::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-track{background:#1a1a1a;}::-webkit-scrollbar-thumb{background:#e31837;border-radius:2px;}@keyframes slideUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}@keyframes spin{to{transform:rotate(360deg)}}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes popIn{0%{transform:scale(0.85);opacity:0}60%{transform:scale(1.05)}100%{transform:scale(1);opacity:1}}.dur-slider{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:3px;outline:none;cursor:pointer;}.dur-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:24px;height:24px;border-radius:50%;background:#e31837;cursor:pointer;border:3px solid #0e0e0e;box-shadow:0 0 0 2px #e31837;}.dur-slider::-moz-range-thumb{width:24px;height:24px;border-radius:50%;background:#e31837;cursor:pointer;border:3px solid #0e0e0e;}@keyframes rebuildPulse{0%{opacity:1}50%{opacity:0.4}100%{opacity:1}}`;
+
+const DEFAULT_FOCUS={trainingFocus:"balanced",workoutDuration:45,deload:false,skipKnees:false,skipAnkle:false,skipShoulders:false,skipBack:false,skipChest:false,customNote:""};
+const DURATION_OPTIONS=[20,30,45,60,75,90];
+function getDurationConfig(mins){
+  const m=mins||45;
+  if(m<=20)return{maxEx:3,setsHint:2,label:"Express",emoji:"⚡",desc:"Quick blast — 2-3 exercises, 2 sets",color:"#4fc3f7",aiNote:`DURATION: Only ${m} minutes. Generate EXACTLY 3 exercises maximum. Each exercise: 2 sets only. Short rests (45s). Keep it intense and focused.`};
+  if(m<=30)return{maxEx:4,setsHint:3,label:"Quick",emoji:"🏃",desc:"4 exercises, 3 sets each",color:"#69f0ae",aiNote:`DURATION: Only ${m} minutes. Generate EXACTLY 4 exercises. Each exercise: 3 sets. Short rests (60s isolation, 75s compound). No warmup exercises.`};
+  if(m<=45)return{maxEx:5,setsHint:3,label:"Standard",emoji:"💪",desc:"5 exercises, 3-4 sets each",color:"#e31837",aiNote:`DURATION: ${m} minutes. Generate 5 exercises. Compounds: 4 sets. Isolation: 3 sets. Standard rest periods.`};
+  if(m<=60)return{maxEx:6,setsHint:4,label:"Full",emoji:"🔥",desc:"6 exercises, 4 sets each",color:"#ffd740",aiNote:`DURATION: ${m} minutes. Generate 6 exercises. Compounds: 4 sets. Isolation: 3-4 sets. Full rest periods.`};
+  if(m<=75)return{maxEx:7,setsHint:4,label:"Extended",emoji:"💯",desc:"7 exercises, 4 sets each",color:"#ffa040",aiNote:`DURATION: ${m} minutes. Generate 7 exercises. 4 sets each. Include warm-up exercises if appropriate.`};
+  return{maxEx:8,setsHint:4,label:"Mega",emoji:"🏆",desc:"8 exercises, 4-5 sets on compounds",color:"#a78bfa",aiNote:`DURATION: ${m} minutes. Generate 8 exercises. Compounds: 5 sets. Isolation: 4 sets. Full session.`};
+}
+const SEED_WEIGHTS={
+  leg_press:{weight:103,lastWeight:103,lastAvgReps:12,lastTargetReps:12,weightIncrement:5,lastCompleted:true},
+  leg_curl:{weight:37,lastWeight:37,lastAvgReps:12,lastTargetReps:12,weightIncrement:2.5,lastCompleted:true},
+  leg_extension:{weight:51,lastWeight:51,lastAvgReps:12,lastTargetReps:12,weightIncrement:2.5,lastCompleted:true},
+  hip_thrust:{weight:60.4,lastWeight:60.4,lastAvgReps:12,lastTargetReps:12,weightIncrement:5,lastCompleted:true},
+  chest_press_db:{weight:15,lastWeight:15,lastAvgReps:12,lastTargetReps:12,weightIncrement:2.5,lastCompleted:true},
+  db_row:{weight:15,lastWeight:15,lastAvgReps:12,lastTargetReps:12,weightIncrement:2.5,lastCompleted:true},
+  seated_chest_press:{weight:40,lastWeight:40,lastAvgReps:10,lastTargetReps:10,weightIncrement:2.5,lastCompleted:true},
+  seated_row:{weight:54,lastWeight:54,lastAvgReps:12,lastTargetReps:12,weightIncrement:2.5,lastCompleted:true},
+  shoulder_press_mach:{weight:20,lastWeight:20,lastAvgReps:12,lastTargetReps:12,weightIncrement:2.5,lastCompleted:true},
+  iso_lat_shoulder:{weight:29,lastWeight:29,lastAvgReps:10,lastTargetReps:10,weightIncrement:2.5,lastCompleted:true},
+  tricep_cable:{weight:16.5,lastWeight:16.5,lastAvgReps:12,lastTargetReps:12,weightIncrement:2.5,lastCompleted:true},
+  bicep_curl_mach:{weight:30,lastWeight:30,lastAvgReps:10,lastTargetReps:10,weightIncrement:2.5,lastCompleted:true},
+};
+const SEED_NAMES={leg_press:"Leg Press",leg_curl:"Leg Curl",leg_extension:"Leg Extension",hip_thrust:"Hip Thrust",chest_press_db:"DB Chest Press",db_row:"DB Row",seated_chest_press:"Seated Chest Press",seated_row:"Seated Row",shoulder_press_mach:"Shoulder Press Mach",iso_lat_shoulder:"Iso Lat Shoulder",tricep_cable:"Tricep Cable",bicep_curl_mach:"Bicep Curl Mach"};
+
+const EXERCISE_LIBRARY={
+  A:[[
+    {id:"leg_press",name:"Linear Leg Press",equipNum:"35",sets:4,reps:12,weightIncrement:5,startWeight:103,muscleGroup:"Quads",tags:["lower","knee"]},
+    {id:"hip_thrust",name:"Glute Drive",equipNum:"36",sets:3,reps:12,weightIncrement:5,startWeight:60,muscleGroup:"Glutes",tags:["lower"]},
+    {id:"seated_chest_press",name:"Chest Press Machine",equipNum:"15",sets:3,reps:10,weightIncrement:2.5,startWeight:40,muscleGroup:"Chest",tags:["upper","chest"],note:"Control the return"},
+    {id:"shoulder_press_mach",name:"Shoulder Press Machine",equipNum:"16",sets:3,reps:12,weightIncrement:2.5,startWeight:20,muscleGroup:"Shoulders",tags:["upper","shoulder"]},
+    {id:"tricep_cable",name:"Tricep Pushdown",equipNum:"14",sets:3,reps:12,weightIncrement:2.5,startWeight:16.5,muscleGroup:"Triceps",tags:["upper"],note:"Keep elbows pinned"},
+  ],[
+    {id:"leg_extension",name:"Leg Extension",equipNum:"10",sets:3,reps:12,weightIncrement:2.5,startWeight:51,muscleGroup:"Quads",tags:["lower","knee"]},
+    {id:"hip_thrust_b",name:"Glute Drive",equipNum:"36",sets:4,reps:10,weightIncrement:5,startWeight:60,muscleGroup:"Glutes",tags:["lower"]},
+    {id:"incline_press",name:"Incline Press Machine",equipNum:"21",sets:3,reps:12,weightIncrement:2.5,startWeight:35,muscleGroup:"Upper Chest",tags:["upper","chest"]},
+    {id:"iso_lat_shoulder",name:"Shoulder Press (ISO)",equipNum:"19",sets:3,reps:10,weightIncrement:2.5,startWeight:29,muscleGroup:"Shoulders",tags:["upper","shoulder"]},
+    {id:"pec_fly",name:"Pec Fly Machine",equipNum:"7",sets:3,reps:15,weightIncrement:2.5,startWeight:20,muscleGroup:"Chest",tags:["upper","chest"],note:"Wide arc — feel the stretch"},
+  ],[
+    {id:"leg_press_c",name:"Linear Leg Press",equipNum:"35",sets:3,reps:15,weightIncrement:5,startWeight:95,muscleGroup:"Quads",tags:["lower","knee"]},
+    {id:"leg_curl",name:"Prone Leg Curl",equipNum:"11",sets:3,reps:12,weightIncrement:2.5,startWeight:37,muscleGroup:"Hamstrings",tags:["lower"]},
+    {id:"chest_press_db",name:"DB Chest Press",equipNum:"29",sets:3,reps:12,weightIncrement:2.5,startWeight:15,muscleGroup:"Chest",tags:["upper","chest"],note:"Flat bench #26, dumbbells from rack #29"},
+    {id:"lateral_raise",name:"Lateral Raise Machine",equipNum:"13",sets:3,reps:15,weightIncrement:2.5,startWeight:12,muscleGroup:"Shoulders",tags:["upper","shoulder"]},
+    {id:"decline_press",name:"Decline Press",equipNum:"20",sets:3,reps:10,weightIncrement:2.5,startWeight:35,muscleGroup:"Lower Chest",tags:["upper","chest"]},
+  ]],
+  B:[[
+    {id:"seated_row",name:"Seated Row",equipNum:"6",sets:4,reps:12,weightIncrement:2.5,startWeight:54,muscleGroup:"Back",tags:["upper","back"],note:"Pull to lower chest, squeeze shoulder blades"},
+    {id:"lat_pulldown",name:"Lat Pulldown",equipNum:"24",sets:3,reps:12,weightIncrement:2.5,startWeight:45,muscleGroup:"Lats",tags:["upper","back"],note:"Pull bar to upper chest"},
+    {id:"bicep_curl_mach",name:"Bicep Curl Machine",equipNum:"14",sets:3,reps:10,weightIncrement:2.5,startWeight:30,muscleGroup:"Biceps",tags:["upper"]},
+    {id:"rear_delt",name:"Rear Delt Machine",equipNum:"7",sets:3,reps:15,weightIncrement:2.5,startWeight:15,muscleGroup:"Rear Delts",tags:["upper","shoulder"],note:"Pec Fly machine rear-delt setting"},
+    {id:"back_ext",name:"Lower Back Extension",equipNum:"32",sets:3,reps:12,weightIncrement:2.5,startWeight:20,muscleGroup:"Lower Back",tags:["back"],note:"Stop at neutral — no hyperextension"},
+    {id:"ab_crunch",name:"Abdominal Crunch Machine",equipNum:"48",sets:3,reps:15,weightIncrement:2.5,startWeight:20,muscleGroup:"Core",tags:["core"],note:"Slow squeeze at top"},
+  ],[
+    {id:"high_row",name:"High Row Machine",equipNum:"38",sets:4,reps:10,weightIncrement:2.5,startWeight:45,muscleGroup:"Back",tags:["upper","back"],note:"Pull elbows down and back"},
+    {id:"low_row",name:"Low Row Machine",equipNum:"40",sets:3,reps:12,weightIncrement:2.5,startWeight:50,muscleGroup:"Back",tags:["upper","back"]},
+    {id:"preacher_curl",name:"Preacher Curl",equipNum:"33",sets:3,reps:12,weightIncrement:2.5,startWeight:20,muscleGroup:"Biceps",tags:["upper"],note:"Strict form — no swinging"},
+    {id:"hip_abductor",name:"Hip Abductor Machine",equipNum:"12",sets:3,reps:15,weightIncrement:2.5,startWeight:40,muscleGroup:"Glutes/Hips",tags:["lower"]},
+    {id:"ab_crunch_b",name:"Abdominal Crunch Machine",equipNum:"48",sets:3,reps:15,weightIncrement:2.5,startWeight:20,muscleGroup:"Core",tags:["core"]},
+    {id:"back_ext_b",name:"Lower Back Extension",equipNum:"32",sets:3,reps:12,weightIncrement:2.5,startWeight:20,muscleGroup:"Lower Back",tags:["back"]},
+  ],[
+    {id:"db_row",name:"Dumbbell Row",equipNum:"29",sets:4,reps:12,weightIncrement:2.5,startWeight:15,muscleGroup:"Back",tags:["upper","back"],note:"Brace on bench — pull elbow to ceiling"},
+    {id:"lat_pulldown_b",name:"Lat Pulldown",equipNum:"24",sets:3,reps:10,weightIncrement:2.5,startWeight:50,muscleGroup:"Lats",tags:["upper","back"]},
+    {id:"bicep_curl_mach_b",name:"Bicep Curl Machine",equipNum:"14",sets:3,reps:12,weightIncrement:2.5,startWeight:30,muscleGroup:"Biceps",tags:["upper"]},
+    {id:"seated_row_b",name:"Seated Row",equipNum:"6",sets:3,reps:15,weightIncrement:2.5,startWeight:48,muscleGroup:"Back",tags:["upper","back"],note:"Lighter, higher reps — hold 1 sec"},
+    {id:"ab_crunch_c",name:"Abdominal Crunch Machine",equipNum:"48",sets:4,reps:15,weightIncrement:2.5,startWeight:20,muscleGroup:"Core",tags:["core"]},
+  ]],
+  C:[[
+    {id:"leg_press_p",name:"Linear Leg Press",equipNum:"35",sets:4,reps:10,weightIncrement:5,startWeight:108,muscleGroup:"Quads",tags:["lower","knee"],note:"Heavy today — slow and controlled"},
+    {id:"seated_chest_p",name:"Chest Press Machine",equipNum:"15",sets:3,reps:10,weightIncrement:2.5,startWeight:42,muscleGroup:"Chest",tags:["upper","chest"]},
+    {id:"seated_row_p",name:"Seated Row",equipNum:"6",sets:3,reps:10,weightIncrement:2.5,startWeight:56,muscleGroup:"Back",tags:["upper","back"]},
+    {id:"shoulder_press_p",name:"Shoulder Press Machine",equipNum:"16",sets:3,reps:10,weightIncrement:2.5,startWeight:22,muscleGroup:"Shoulders",tags:["upper","shoulder"]},
+    {id:"hip_thrust_p",name:"Glute Drive",equipNum:"36",sets:3,reps:12,weightIncrement:5,startWeight:65,muscleGroup:"Glutes",tags:["lower"]},
+    {id:"lat_pulldown_p",name:"Lat Pulldown",equipNum:"24",sets:3,reps:10,weightIncrement:2.5,startWeight:50,muscleGroup:"Lats",tags:["upper","back"]},
+  ],[
+    {id:"leg_curl_p",name:"Prone Leg Curl",equipNum:"11",sets:4,reps:10,weightIncrement:2.5,startWeight:39,muscleGroup:"Hamstrings",tags:["lower"]},
+    {id:"incline_press_p",name:"Incline Press Machine",equipNum:"21",sets:3,reps:10,weightIncrement:2.5,startWeight:37,muscleGroup:"Upper Chest",tags:["upper","chest"]},
+    {id:"high_row_p",name:"High Row Machine",equipNum:"38",sets:3,reps:10,weightIncrement:2.5,startWeight:48,muscleGroup:"Back",tags:["upper","back"]},
+    {id:"iso_lat_p",name:"Shoulder Press (ISO)",equipNum:"19",sets:3,reps:10,weightIncrement:2.5,startWeight:31,muscleGroup:"Shoulders",tags:["upper","shoulder"]},
+    {id:"leg_extension_p",name:"Leg Extension",equipNum:"10",sets:3,reps:12,weightIncrement:2.5,startWeight:51,muscleGroup:"Quads",tags:["lower","knee"]},
+    {id:"tricep_cable_p",name:"Tricep Pushdown",equipNum:"14",sets:3,reps:12,weightIncrement:2.5,startWeight:18,muscleGroup:"Triceps",tags:["upper"]},
+  ],[
+    {id:"hip_thrust_q",name:"Glute Drive",equipNum:"36",sets:4,reps:12,weightIncrement:5,startWeight:65,muscleGroup:"Glutes",tags:["lower"]},
+    {id:"chest_press_q",name:"DB Chest Press",equipNum:"29",sets:3,reps:12,weightIncrement:2.5,startWeight:16,muscleGroup:"Chest",tags:["upper","chest"]},
+    {id:"low_row_q",name:"Low Row Machine",equipNum:"40",sets:3,reps:12,weightIncrement:2.5,startWeight:52,muscleGroup:"Back",tags:["upper","back"]},
+    {id:"lateral_raise_q",name:"Lateral Raise Machine",equipNum:"13",sets:3,reps:15,weightIncrement:2.5,startWeight:14,muscleGroup:"Shoulders",tags:["upper","shoulder"]},
+    {id:"leg_press_q",name:"Linear Leg Press",equipNum:"35",sets:3,reps:15,weightIncrement:5,startWeight:95,muscleGroup:"Quads",tags:["lower","knee"]},
+    {id:"bicep_curl_q",name:"Bicep Curl Machine",equipNum:"14",sets:3,reps:12,weightIncrement:2.5,startWeight:30,muscleGroup:"Biceps",tags:["upper"]},
+  ]],
+};
+
+const DAY_TYPES=[{id:"A",label:"DAY A",name:"Push & Legs",color:"#e31837"},{id:"B",label:"DAY B",name:"Pull & Core",color:"#4fc3f7"},{id:"C",label:"DAY C",name:"Full Body Power",color:"#69f0ae"}];
+const EFFORT_RATINGS=[{key:"light",emoji:"😎",label:"Too Light",desc:"Could've done way more",color:"#4fc3f7"},{key:"nailed",emoji:"💪",label:"Nailed It",desc:"Hit it perfectly",color:"#69f0ae"},{key:"tough",emoji:"😤",label:"Really Tough",desc:"Ground it out — good work",color:"#ffd740"},{key:"failed",emoji:"🔴",label:"Nearly Failed",desc:"Struggled to finish",color:"#ff6b6b"}];
+const FB_TITLES={A:["Leg & Push Power","Quad & Chest Builder","Push Day Grind"],B:["Back Attack","Pull & Core Crusher","Row Day"],C:["Full Body Blitz","Total Body Strength","Head to Toe"]};
+const FB_TIPS={A:["Drive through heels on every leg movement","Control the negative — 2 seconds down","Full range beats heavy weight every time"],B:["Pull with elbows, not hands","Squeeze at peak contraction — 1 second","Retract shoulder blades on every row"],C:["Full body — stay focused between exercises","Quality over quantity on every compound","Breathe out on effort, in on return"]};
+const EQUIP_STR=`AVAILABLE STATIONS (ONLY these numbers):\n#6 Seated Row|#7 Pec Fly/Rear Delt|#8 Calf|#10 Leg Extension|#11 Prone Leg Curl|#12 Hip Abductor|#13 Lateral Raise|#14 Bicep/Tricep Machine|#15 Chest Press Machine|#16 Shoulder Press Machine|#17 Multi Jungle|#19 Shoulder Press 2|#20 Decline Press|#21 Incline Press|#22 Olympic Bench|#23 Smith Machine|#24 Dual Pulley|#25 Adj Bench|#26 Flat Bench|#29 Dumbbells & Rack|#32 Back Extension|#33 Preacher Curl|#35 Linear Leg Press|#36 Glute Drive|#37 Leg Raise/Dip|#38 High Row|#39 Row Machine|#40 Low Row|#41 Half Rack|#48 Ab Crunch Machine`;
+
+function applyFocus(exercises,focus){
+  let f=exercises;
+  if(focus.trainingFocus==="upper")f=f.filter(e=>e.tags?.includes("upper")||e.tags?.includes("core"));
+  else if(focus.trainingFocus==="lower")f=f.filter(e=>e.tags?.includes("lower")||e.tags?.includes("core"));
+  else if(focus.trainingFocus==="core")f=f.filter(e=>e.tags?.includes("core")||e.tags?.includes("upper"));
+  if(focus.skipKnees)f=f.filter(e=>!e.tags?.includes("knee"));
+  if(focus.skipAnkle)f=f.filter(e=>!e.tags?.includes("ankle"));
+  if(focus.skipShoulders)f=f.filter(e=>!e.tags?.includes("shoulder"));
+  if(focus.skipBack)f=f.filter(e=>!e.tags?.includes("back"));
+  if(focus.skipChest)f=f.filter(e=>!e.tags?.includes("chest"));
+  if(f.length<3)f=exercises.filter(e=>{if(focus.skipKnees&&e.tags?.includes("knee"))return false;if(focus.skipAnkle&&e.tags?.includes("ankle"))return false;if(focus.skipShoulders&&e.tags?.includes("shoulder"))return false;if(focus.skipBack&&e.tags?.includes("back"))return false;if(focus.skipChest&&e.tags?.includes("chest"))return false;return true;});
+  if(focus.deload)f=f.map(e=>({...e,reps:Math.round(e.reps*1.25),sets:Math.max(2,e.sets-1),startWeight:Math.round(e.startWeight*0.8*2)/2}));
+  return f.slice(0,6);
+}
+function getFallback(dayId,sessionNum,recentIds,focus){
+  const pool=EXERCISE_LIBRARY[dayId][sessionNum%3];
+  const focused=applyFocus(pool,focus);
+  const dur=getDurationConfig(focus.workoutDuration||45);
+  let exs=focused.filter(e=>!recentIds.slice(0,6).includes(e.id)).length>=3?focused.filter(e=>!recentIds.slice(0,6).includes(e.id)):focused;
+  // Cap count and sets to match duration
+  exs=exs.slice(0,dur.maxEx).map(e=>({...e,sets:dur.setsHint<=2?Math.min(e.sets,2):dur.setsHint<=3?Math.min(e.sets,3):e.sets}));
+  let tip=FB_TIPS[dayId][sessionNum%FB_TIPS[dayId].length];
+  if(focus.deload)tip="Deload week — lighter loads, perfect form, full recovery";
+  return{sessionTitle:FB_TITLES[dayId][sessionNum%FB_TITLES[dayId].length],focusTip:tip,exercises:exs,isFallback:true};
+}
+function getWeightDecision(avgReps,targetReps,inc){
+  const r=avgReps/targetReps;
+  if(avgReps===0)return{action:"hold",delta:0,label:"Not logged",color:"#555"};
+  if(r>=1.15)return{action:"increase",delta:inc,label:`Crushed it! Up ${inc}kg`,color:"#69f0ae"};
+  if(r>=0.92)return{action:"increase",delta:inc,label:`Hit target! Up ${inc}kg`,color:"#69f0ae"};
+  if(r>=0.75)return{action:"hold",delta:0,label:"Close — hold weight",color:"#ffd740"};
+  if(r>=0.5)return{action:"hold",delta:0,label:"Hold — build strength",color:"#ffa040"};
+  return{action:"decrease",delta:-inc,label:`Drop ${inc}kg — rebuild`,color:"#ff6b6b"};
+}
+function getRec(exId,startWeight,weights,focus){
+  const s=weights[exId];const base=focus?.deload?Math.round(startWeight*0.8*2)/2:startWeight;
+  if(!s)return{weight:base,badge:"🆕 First time",badgeColor:"#4fc3f7",detail:"Starting weight — adjust if needed"};
+  const w=focus?.deload?Math.round(s.weight*0.8*2)/2:s.weight;
+  if(!s.lastAvgReps)return{weight:w,badge:`→ ${w}kg`,badgeColor:"#ffd740",detail:focus?.deload?"Deload — 80% weight":"No rep data yet"};
+  const dec=getWeightDecision(s.lastAvgReps,s.lastTargetReps,s.weightIncrement||2.5);
+  const arrow=dec.action==="increase"?"↑":dec.action==="decrease"?"↓":"→";
+  return{weight:w,badge:focus?.deload?`📉 ${w}kg`:`${arrow} ${w}kg`,badgeColor:focus?.deload?"#ffa040":dec.color,detail:focus?.deload?`Deload — 80% of ${s.weight}kg`:`Last: ${Number(s.lastAvgReps).toFixed(1)}/${s.lastTargetReps} reps · ${dec.label}`};
+}
+function buildPerfNotes(history,weights){return history.slice(0,3).map(h=>{const lines=(h.exerciseIds||[]).map(id=>{const w=weights[id];if(!w||!w.lastAvgReps)return null;return`${id}:${Number(w.lastAvgReps).toFixed(1)}/${w.lastTargetReps}@${w.lastWeight}kg`;}).filter(Boolean);return lines.length?`${h.date}: ${lines.join(",")}`:null;}).filter(Boolean).join("\n");}
+function buildSeedSummary(weights){return Object.entries(weights).map(([id,w])=>`${SEED_NAMES[id]||id}:${w.weight}kg*${w.lastTargetReps}reps`).join(", ");}
+function buildFocusInstructions(focus){
+  const dur=getDurationConfig(focus.workoutDuration||45);
+  const p=[dur.aiNote];
+  if(focus.trainingFocus==="upper")p.push("FOCUS: Upper body ONLY.");if(focus.trainingFocus==="lower")p.push("FOCUS: Lower body ONLY.");if(focus.trainingFocus==="core")p.push("FOCUS: Core + upper.");if(focus.deload)p.push("DELOAD: Reduce weights 20%, increase reps 2-3.");if(focus.skipKnees)p.push("SKIP KNEES: No leg press/extension/squats.");if(focus.skipAnkle)p.push("SKIP ANKLE: No calf raises, lunges, sled, single-leg balance.");if(focus.skipShoulders)p.push("SKIP SHOULDERS: No overhead press or lateral raises.");if(focus.skipBack)p.push("SKIP BACK: No rows or back extensions.");if(focus.skipChest)p.push("SKIP CHEST: No pressing or pec fly.");if(focus.customNote)p.push(`USER NOTE: ${focus.customNote}`);return"\n\nSPECIAL INSTRUCTIONS (MUST FOLLOW):\n"+p.join("\n");
+}function getNextSetSuggestion(weight,reps,targetReps,rating,inc){
+  if(!rating)return null;const r=EFFORT_RATINGS.find(e=>e.key===rating);if(!r)return null;
+  if(rating==="light"&&reps>=targetReps)return{msg:`${r.emoji} Too light — try ${+(weight+inc).toFixed(1)}kg next set`,color:r.color};
+  if(rating==="light")return{msg:`${r.emoji} Felt light but missed reps — hold ${weight}kg`,color:"#ffd740"};
+  if(rating==="nailed")return{msg:`${r.emoji} Perfect — keep ${weight}kg`,color:r.color};
+  if(rating==="tough"&&reps>=targetReps)return{msg:`${r.emoji} Tough but nailed it — hold ${weight}kg`,color:r.color};
+  if(rating==="tough")return{msg:`${r.emoji} Missed reps — hold ${weight}kg for now`,color:"#ffd740"};
+  if(rating==="failed")return{msg:`${r.emoji} Drop to ${Math.max(0,+(weight-inc).toFixed(1))}kg next set`,color:r.color};
+  return null;
+}
+
+async function tryAIWorkout(dayType,sessionNum,recentIds,perfNotes,weights,focus){
+  const fi=buildFocusInstructions(focus);
+  const system=`You are a personal trainer AI for Snap Fitness Watagan Park. USER goal: build muscle + lose weight. 3-day cycle A/B/C.\nESTABLISHED STRENGTH: ${buildSeedSummary(weights)}\n\n${EQUIP_STR}\n${fi}\n\nRULES: Every exercise MUST use a station number from the list above. equipNum must be the exact number string. name must match station. Follow ALL special instructions. Respond ONLY valid JSON.`;
+  const msg=`Session #${sessionNum} - ${dayType.name} (Day ${dayType.id})\nAvoid repeating: ${recentIds.join(",")||"none"}\n${perfNotes?`Recent performance:\n${perfNotes}`:""}\nGenerate 5-6 exercises. Adjust weights/sets for progressive overload.\n{"sessionTitle":"title","focusTip":"tip max 14 words","exercises":[{"id":"snake_case","name":"Exact station name","equipNum":"num","sets":3,"reps":12,"weightIncrement":2.5,"startWeight":10,"muscleGroup":"Chest","note":"tip or null"}]}`;
+  const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),9000);
+  const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system,messages:[{role:"user",content:msg}]}),signal:ctrl.signal});
+  if(!res.ok)throw new Error();
+  const data=await res.json();
+  const text=(data.content||[]).map(b=>b.text||"").join("").replace(/```json|```/g,"").trim();
+  return{...JSON.parse(text),isFallback:false};
+}
+async function tryAIRemix(exercise,otherNames,dayType,weights,focus){
+  const fi=buildFocusInstructions(focus);
+  const system=`Personal trainer AI, Snap Fitness Watagan Park.\n${EQUIP_STR}\n${fi}\nOnly use stations from list. Respond ONLY valid JSON.`;
+  const msg=`Station #${exercise.equipNum} "${exercise.name}" busy. Find replacement for "${exercise.muscleGroup}". NOT: ${otherNames.join(",")}. Keep ${exercise.sets}x${exercise.reps}.\n{"id":"snake_case","name":"Exact station name","equipNum":"num","sets":${exercise.sets},"reps":${exercise.reps},"weightIncrement":${exercise.weightIncrement},"startWeight":${exercise.startWeight},"muscleGroup":"${exercise.muscleGroup||""}","note":"tip or null"}`;
+  const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),7000);
+  const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:400,system,messages:[{role:"user",content:msg}]}),signal:ctrl.signal});
+  if(!res.ok)throw new Error();
+  const data=await res.json();
+  return JSON.parse((data.content||[]).map(b=>b.text||"").join("").replace(/```json|```/g,"").trim());
+}
+function fallbackRemix(exercise,otherNames,dayId,focus){
+  const all=EXERCISE_LIBRARY[dayId].flat();const safe=applyFocus(all,focus);
+  const cands=safe.filter(e=>e.muscleGroup===exercise.muscleGroup&&e.id!==exercise.id&&!otherNames.includes(e.name));
+  if(cands.length)return cands[Math.floor(Math.random()*cands.length)];
+  const broad=safe.filter(e=>e.id!==exercise.id&&!otherNames.includes(e.name));
+  return broad[Math.floor(Math.random()*broad.length)]||exercise;
+}
+
+// ─── CSV Export ───────────────────────────────────────────────────────────────
+function exportCSV(exerciseHistory){
+  const rows=["Date,Exercise,Station,Sets Logged,Sets Total,Avg Reps,Target Reps,Weight (kg),Day Type"];
+  Object.entries(exerciseHistory||{}).forEach(([exId,entries])=>{
+    const name=SEED_NAMES[exId]||exId.replace(/_/g," ");
+    (entries||[]).forEach(e=>{
+      rows.push(`${e.date},"${name}","#${e.equipNum||"?"}",${e.setsLogged||""},${e.totalSets||""},${e.avgReps!=null?e.avgReps.toFixed(1):""},${e.targetReps||""},${e.weight||""},${e.dayId||""}`);
+    });
+  });
+  const blob=new Blob([rows.join("\n")],{type:"text/csv"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");a.href=url;a.download=`snapfit-history-${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(url);
+}
+
+// ─── Logo ─────────────────────────────────────────────────────────────────────
+function SnapLogo({height=26}){
+  const w=Math.round(height*3.3);
+  return(<svg width={w} height={height} viewBox="0 0 86 26" fill="none" xmlns="http://www.w3.org/2000/svg" style={{flexShrink:0}}><rect width="86" height="26" rx="3" fill="#e31837"/><text x="5" y="11.5" fontFamily="'Arial Black','Arial',sans-serif" fontWeight="900" fontSize="8.5" fill="white" letterSpacing="-0.2">snap</text><text x="5" y="22" fontFamily="'Arial Black','Arial',sans-serif" fontWeight="900" fontSize="8.5" fill="white" letterSpacing="-0.2">fitness</text><rect x="60" y="3" width="22" height="10" rx="1.5" fill="rgba(0,0,0,0.25)"/><text x="71" y="10.5" fontFamily="'Arial',sans-serif" fontWeight="700" fontSize="7" fill="white" textAnchor="middle" letterSpacing="0.2">24/7</text></svg>);
+}
+
+// ─── Exercise History Modal ───────────────────────────────────────────────────
+function ExerciseHistoryModal({exId,exName,history,onClose}){
+  const entries=(history[exId]||[]).slice().reverse();
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#161616",border:"1px solid #2a2a2a",borderRadius:"20px 20px 0 0",padding:"24px 20px 48px",width:"100%",maxWidth:600,animation:"popIn 0.2s ease",maxHeight:"80vh",overflow:"auto"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <div><div style={{fontFamily:"Bebas Neue",fontSize:"1.3rem",color:"#f0f0f0",letterSpacing:"0.06em"}}>{exName.toUpperCase()}</div><div style={{fontSize:"0.62rem",color:"#555",marginTop:2}}>{entries.length} sessions tracked</div></div>
+          <button onClick={onClose} style={{background:"#2a2a2a",border:"none",color:"#888",borderRadius:20,width:32,height:32,cursor:"pointer",fontSize:"1rem"}}>✕</button>
+        </div>
+        {entries.length===0
+          ?<div style={{textAlign:"center",padding:"30px",color:"#444",fontSize:"0.78rem"}}>No history yet for this exercise.</div>
+          :<table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.68rem"}}>
+            <thead><tr style={{borderBottom:"1px solid #2a2a2a"}}>{["Date","Weight","Avg Reps","Target","Sets"].map(h=><th key={h} style={{padding:"6px 4px",color:"#555",fontWeight:700,textAlign:"left"}}>{h}</th>)}</tr></thead>
+            <tbody>{entries.map((e,i)=>{
+              const prev=entries[i-1];const wUp=prev&&e.weight>prev.weight;const wDn=prev&&e.weight<prev.weight;
+              return(<tr key={i} style={{borderBottom:"1px solid #1a1a1a"}}>
+                <td style={{padding:"8px 4px",color:"#777"}}>{e.date}</td>
+                <td style={{padding:"8px 4px",color:wUp?"#69f0ae":wDn?"#ff6b6b":"#f0f0f0",fontWeight:700}}>{e.weight}kg{wUp?" ↑":wDn?" ↓":""}</td>
+                <td style={{padding:"8px 4px",color:"#ccc"}}>{e.avgReps!=null?e.avgReps.toFixed(1):"—"}</td>
+                <td style={{padding:"8px 4px",color:"#555"}}>{e.targetReps}</td>
+                <td style={{padding:"8px 4px",color:"#555"}}>{e.setsLogged}/{e.totalSets}</td>
+              </tr>);
+            })}</tbody>
+          </table>
+        }
+      </div>
+    </div>
+  );
+}
+
+// ─── Day Picker Modal ─────────────────────────────────────────────────────────
+function DayPickerModal({currentIdx,onPick,onClose}){
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:150,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 20px"}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:20,padding:"24px",width:"100%",maxWidth:320,animation:"popIn 0.2s ease"}}>
+        <div style={{fontFamily:"Bebas Neue",fontSize:"1.3rem",color:"#f0f0f0",letterSpacing:"0.08em",marginBottom:4}}>CHOOSE TODAY'S DAY</div>
+        <div style={{fontSize:"0.65rem",color:"#555",marginBottom:18}}>Override the scheduled cycle for this session</div>
+        {DAY_TYPES.map((d,i)=>(
+          <button key={d.id} onClick={()=>{onPick(i);onClose();}} style={{width:"100%",padding:"14px 16px",borderRadius:12,border:`1.5px solid ${d.color}55`,background:i===currentIdx?"#111":"transparent",cursor:"pointer",display:"flex",alignItems:"center",gap:14,marginBottom:8,textAlign:"left"}}>
+            <div style={{width:10,height:10,borderRadius:"50%",background:d.color,flexShrink:0}}/>
+            <div style={{flex:1}}><div style={{fontFamily:"Bebas Neue",fontSize:"1.05rem",color:d.color,letterSpacing:"0.06em"}}>{d.label} — {d.name}</div></div>
+            {i===currentIdx&&<span style={{fontSize:"0.56rem",color:d.color,fontWeight:700}}>SCHEDULED</span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Rep Picker ───────────────────────────────────────────────────────────────
+function RepPicker({target,value,onChange,rating,onRate,onClose}){
+  const[step,setStep]=useState("reps");
+  const opts=[...new Set([Math.max(0,target-3),Math.max(0,target-2),Math.max(0,target-1),target,target+1,target+2,target+3])];
+  const rc=value>=target?"#69f0ae":value>=target*0.75?"#ffd740":"#ff6b6b";
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#1a1a1a",border:"1px solid #333",borderRadius:20,padding:"24px 24px 20px",textAlign:"center",animation:"popIn 0.2s ease",width:290}}>
+        {step==="reps"&&(<>
+          <div style={{display:"flex",justifyContent:"center",gap:6,marginBottom:16}}><div style={{height:3,width:40,borderRadius:2,background:"#e31837"}}/><div style={{height:3,width:40,borderRadius:2,background:"#333"}}/></div>
+          <div style={{fontSize:"0.68rem",color:"#888",fontWeight:700,letterSpacing:"0.1em",marginBottom:4}}>REPS COMPLETED</div>
+          <div style={{fontSize:"0.7rem",color:"#555",marginBottom:16}}>Target: <span style={{color:"#f0f0f0",fontWeight:600}}>{target} reps</span></div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:16,marginBottom:14}}>
+            <button onClick={()=>onChange(Math.max(0,value-1))} style={{width:44,height:44,borderRadius:12,border:"1px solid #333",background:"#222",color:"#ccc",fontSize:"1.5rem",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
+            <div><div style={{fontFamily:"Bebas Neue",fontSize:"3.8rem",color:rc,lineHeight:1,minWidth:76,textAlign:"center"}}>{value}</div><div style={{fontSize:"0.6rem",color:"#555"}}>reps done</div></div>
+            <button onClick={()=>onChange(Math.min(40,value+1))} style={{width:44,height:44,borderRadius:12,border:"1px solid #333",background:"#222",color:"#ccc",fontSize:"1.5rem",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+          </div>
+          <div style={{display:"flex",gap:5,justifyContent:"center",flexWrap:"wrap",marginBottom:18}}>
+            {opts.map(n=><button key={n} onClick={()=>onChange(n)} style={{width:34,height:34,borderRadius:8,border:`1.5px solid ${value===n?"#e31837":"#2a2a2a"}`,background:value===n?"#e31837":"#1e1e1e",color:value===n?"#fff":"#888",fontSize:"0.76rem",fontWeight:700,cursor:"pointer"}}>{n}</button>)}
+          </div>
+          <button onClick={()=>setStep("rating")} style={{width:"100%",height:46,borderRadius:12,border:"none",cursor:"pointer",fontFamily:"Bebas Neue",fontSize:"1.1rem",letterSpacing:"0.1em",background:"linear-gradient(135deg,#e31837,#ff4d6a)",color:"#fff"}}>NEXT — HOW DID IT FEEL? →</button>
+        </>)}
+        {step==="rating"&&(<>
+          <div style={{display:"flex",justifyContent:"center",gap:6,marginBottom:16}}><div style={{height:3,width:40,borderRadius:2,background:"#555"}}/><div style={{height:3,width:40,borderRadius:2,background:"#e31837"}}/></div>
+          <div style={{fontSize:"0.68rem",color:"#888",fontWeight:700,letterSpacing:"0.1em",marginBottom:4}}>HOW DID THAT FEEL?</div>
+          <div style={{fontSize:"0.7rem",color:"#555",marginBottom:16}}>{value} reps at current weight</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
+            {EFFORT_RATINGS.map(r=>(<button key={r.key} onClick={()=>onRate(r.key)} style={{width:"100%",padding:"11px 14px",borderRadius:12,border:`1.5px solid ${rating===r.key?r.color:"#2a2a2a"}`,background:rating===r.key?"#111":"#161616",cursor:"pointer",display:"flex",alignItems:"center",gap:12,textAlign:"left"}}>
+              <span style={{fontSize:"1.4rem",flexShrink:0}}>{r.emoji}</span>
+              <div style={{flex:1}}><div style={{fontSize:"0.78rem",fontWeight:700,color:rating===r.key?r.color:"#ccc"}}>{r.label}</div><div style={{fontSize:"0.6rem",color:"#555",marginTop:1}}>{r.desc}</div></div>
+              {rating===r.key&&<div style={{width:8,height:8,borderRadius:"50%",background:r.color,flexShrink:0}}/>}
+            </button>))}
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>setStep("reps")} style={{width:44,height:44,borderRadius:12,border:"1px solid #2a2a2a",background:"#111",color:"#666",cursor:"pointer",fontSize:"1rem",flexShrink:0}}>←</button>
+            <button onClick={onClose} disabled={!rating} style={{flex:1,height:44,borderRadius:12,border:"none",cursor:rating?"pointer":"not-allowed",fontFamily:"Bebas Neue",fontSize:"1.1rem",letterSpacing:"0.1em",background:rating?"linear-gradient(135deg,#e31837,#ff4d6a)":"#1a1a1a",color:rating?"#fff":"#333"}}>LOG IT ✓</button>
+          </div>
+        </>)}
+      </div>
+    </div>
+  );
+}
+
+// ─── Setup Gate ───────────────────────────────────────────────────────────────
+function SetupGate({onBegin}){
+  return(<div style={{minHeight:"100vh",background:"#0e0e0e",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px",animation:"fadeIn 0.5s ease"}}>
+    <div style={{maxWidth:420,width:"100%",textAlign:"center"}}>
+      <div style={{marginBottom:24,display:"flex",justifyContent:"center"}}><SnapLogo height={34}/></div>
+      <div style={{fontFamily:"Bebas Neue",fontSize:"2.8rem",color:"#f0f0f0",letterSpacing:"0.05em",lineHeight:1,marginBottom:8}}>WELCOME TO<br/><span style={{color:"#e31837"}}>YOUR TRACKER</span></div>
+      <div style={{fontSize:"0.78rem",color:"#666",lineHeight:1.7,marginBottom:32}}>Before your first workout is generated, take 30 seconds to set your focus and flag any injuries.<br/><span style={{color:"#888"}}>The AI uses this every session.</span></div>
+      <button onClick={onBegin} style={{width:"100%",height:56,borderRadius:14,border:"none",cursor:"pointer",fontFamily:"Bebas Neue",fontSize:"1.35rem",letterSpacing:"0.1em",background:"linear-gradient(135deg,#e31837,#ff4d6a)",color:"#fff",boxShadow:"0 4px 28px rgba(227,24,55,0.35)"}}>SET UP MY FOCUS →</button>
+    </div>
+  </div>);
+}
+
+// ─── Focus View ───────────────────────────────────────────────────────────────
+function FocusView({focus,onUpdate,onApply,onDurationChange,isFirstRun=false}){
+  const[local,setLocal]=useState({...focus});
+  const changed=JSON.stringify(local)!==JSON.stringify(focus);
+  const focusOpts=[{key:"balanced",label:"⚖️ Balanced",desc:"Full body rotation as normal"},{key:"upper",label:"💪 Upper Body Phase",desc:"Chest, back, shoulders, arms only"},{key:"lower",label:"🦵 Lower Body Phase",desc:"Legs, glutes, hamstrings only"},{key:"core",label:"🎯 Core & Upper",desc:"Emphasise core + upper body"}];
+  const restrictions=[{key:"skipKnees",label:"🦵 Knees playing up",desc:"Avoid knee-loaded exercises"},{key:"skipAnkle",label:"🦶 Ankle playing up",desc:"No calf raises, lunges, sled, single-leg"},{key:"skipShoulders",label:"💆 Shoulder niggle",desc:"No overhead pressing or lateral raises"},{key:"skipBack",label:"🔙 Lower back sore",desc:"Skip rows and back extensions"},{key:"skipChest",label:"🫁 Chest / pec issue",desc:"No chest pressing or pec fly"}];
+  function tog(k){setLocal(p=>({...p,[k]:!p[k]}));}
+
+  const durIdx=DURATION_OPTIONS.indexOf(local.workoutDuration||45);
+  const safeDurIdx=durIdx>=0?durIdx:2; // default to 45min (index 2)
+  const durCfg=getDurationConfig(local.workoutDuration||45);
+
+  // Slider background fill %
+  const sliderPct=(safeDurIdx/(DURATION_OPTIONS.length-1))*100;
+
+  function handleDurationSlider(e){
+    const idx=parseInt(e.target.value);
+    const mins=DURATION_OPTIONS[idx];
+    const updated={...local,workoutDuration:mins};
+    setLocal(updated);
+    // Instant rebuild — no save button needed
+    if(onDurationChange) onDurationChange(updated);
+  }
+
+  return(<div style={{paddingTop:24,animation:"fadeIn 0.4s ease",paddingBottom:40}}>
+    <div style={{fontFamily:"Bebas Neue",fontSize:"2.2rem",color:"#f0f0f0",letterSpacing:"0.05em",marginBottom:4}}>FOCUS & RESTRICTIONS</div>
+    <div style={{fontSize:"0.72rem",color:"#666",marginBottom:20}}>Set your training focus or flag an injury — the AI adjusts every workout to match</div>
+
+    {/* ── DURATION SLIDER ─────────────────────────────── */}
+    <div style={{background:"#111",border:`1.5px solid ${durCfg.color}55`,borderRadius:12,padding:"18px 16px",marginBottom:14}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
+        <div>
+          <div style={{fontSize:"0.65rem",color:durCfg.color,fontWeight:700,letterSpacing:"0.1em",marginBottom:4}}>⏱ WORKOUT DURATION</div>
+          <div style={{display:"flex",alignItems:"baseline",gap:8}}>
+            <div style={{fontFamily:"Bebas Neue",fontSize:"2.6rem",color:durCfg.color,lineHeight:1}}>{local.workoutDuration||45}</div>
+            <div style={{fontSize:"0.72rem",color:"#888",fontWeight:600}}>min</div>
+            <div style={{fontSize:"0.72rem",color:durCfg.color,fontWeight:700,background:`${durCfg.color}18`,padding:"2px 8px",borderRadius:20,marginLeft:4}}>{durCfg.emoji} {durCfg.label}</div>
+          </div>
+          <div style={{fontSize:"0.64rem",color:"#666",marginTop:3}}>{durCfg.desc}</div>
+        </div>
+      </div>
+      {/* Slider */}
+      <div style={{position:"relative",paddingBottom:22}}>
+        <input
+          type="range"
+          className="dur-slider"
+          min={0} max={DURATION_OPTIONS.length-1} step={1}
+          value={safeDurIdx}
+          onChange={handleDurationSlider}
+          style={{background:`linear-gradient(to right,${durCfg.color} 0%,${durCfg.color} ${sliderPct}%,#2a2a2a ${sliderPct}%,#2a2a2a 100%)`}}
+        />
+        {/* Tick labels */}
+        <div style={{display:"flex",justifyContent:"space-between",position:"absolute",bottom:0,left:0,right:0,paddingTop:4}}>
+          {DURATION_OPTIONS.map((m,i)=>(
+            <div key={m} style={{fontSize:"0.55rem",color:i===safeDurIdx?durCfg.color:"#3a3a3a",fontWeight:i===safeDurIdx?700:400,textAlign:"center",minWidth:20,transition:"color 0.2s"}}>{m}m</div>
+          ))}
+        </div>
+      </div>
+      {!isFirstRun&&<div style={{fontSize:"0.6rem",color:"#555",textAlign:"center",marginTop:4}}>⚡ Workout rebuilds instantly when you change this</div>}
+    </div>
+
+    {/* ── TRAINING FOCUS ─────────────────────────────── */}
+    <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:12,padding:"16px",marginBottom:14}}>
+      <div style={{fontSize:"0.65rem",color:"#e31837",fontWeight:700,letterSpacing:"0.1em",marginBottom:12}}>🎯 TRAINING FOCUS</div>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>{focusOpts.map(opt=>{const active=local.trainingFocus===opt.key;return(<button key={opt.key} onClick={()=>setLocal(p=>({...p,trainingFocus:opt.key}))} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",borderRadius:10,border:`1.5px solid ${active?"#e31837":"#252525"}`,background:active?"#1a0a0d":"#161616",cursor:"pointer",textAlign:"left"}}>
+        <div><div style={{fontSize:"0.82rem",color:active?"#f0f0f0":"#888",fontWeight:600}}>{opt.label}</div><div style={{fontSize:"0.65rem",color:"#555",marginTop:2}}>{opt.desc}</div></div>
+        <div style={{width:18,height:18,borderRadius:"50%",border:`2px solid ${active?"#e31837":"#333"}`,background:active?"#e31837":"transparent",flexShrink:0}}/>
+      </button>);})}
+      </div>
+    </div>
+    <div style={{background:"#111",border:`1.5px solid ${local.deload?"#ffa040":"#1e1e1e"}`,borderRadius:12,padding:"16px",marginBottom:14,cursor:"pointer"}} onClick={()=>tog("deload")}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div><div style={{fontSize:"0.65rem",color:"#ffa040",fontWeight:700,letterSpacing:"0.1em",marginBottom:4}}>📉 DELOAD WEEK</div><div style={{fontSize:"0.78rem",color:local.deload?"#f0f0f0":"#888",fontWeight:600}}>Recovery mode — lighter loads, more reps</div></div>
+        <div style={{width:44,height:26,borderRadius:13,background:local.deload?"#ffa040":"#222",position:"relative",flexShrink:0,marginLeft:12,transition:"background 0.25s"}}><div style={{position:"absolute",top:3,left:local.deload?20:3,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/></div>
+      </div>
+    </div>
+    <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:12,padding:"16px",marginBottom:14}}>
+      <div style={{fontSize:"0.65rem",color:"#ffd740",fontWeight:700,letterSpacing:"0.1em",marginBottom:12}}>⚠️ SKIP THESE TODAY</div>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>{restrictions.map(r=>{const active=local[r.key];return(<div key={r.key} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${active?"#ffd740":"#252525"}`,background:active?"#1a1800":"#161616",cursor:"pointer"}} onClick={()=>tog(r.key)}>
+        <div><div style={{fontSize:"0.78rem",color:active?"#ffd740":"#888",fontWeight:600}}>{r.label}</div><div style={{fontSize:"0.62rem",color:"#555",marginTop:2}}>{r.desc}</div></div>
+        <div style={{width:44,height:26,borderRadius:13,background:active?"#ffd740":"#222",position:"relative",flexShrink:0,marginLeft:12,transition:"background 0.25s"}}><div style={{position:"absolute",top:3,left:active?20:3,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/></div>
+      </div>);})}</div>
+    </div>
+    <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:12,padding:"16px",marginBottom:20}}>
+      <div style={{fontSize:"0.65rem",color:"#4fc3f7",fontWeight:700,letterSpacing:"0.1em",marginBottom:8}}>📝 EXTRA NOTE FOR AI (optional)</div>
+      <textarea value={local.customNote} onChange={e=>setLocal(p=>({...p,customNote:e.target.value}))} placeholder="e.g. left elbow sore, just did a long run..." maxLength={150} rows={2} style={{width:"100%",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:8,padding:"10px 12px",color:"#ccc",fontSize:"0.75rem",resize:"none",outline:"none",lineHeight:1.5}}/>
+    </div>
+    <button onClick={()=>{onUpdate(local);onApply(local);}} style={{width:"100%",height:52,borderRadius:14,border:"none",cursor:"pointer",fontFamily:"Bebas Neue",fontSize:"1.25rem",letterSpacing:"0.1em",background:isFirstRun||changed?"linear-gradient(135deg,#e31837,#ff4d6a)":"#252525",color:isFirstRun||changed?"#fff":"#444",transition:"all 0.3s",boxShadow:isFirstRun||changed?"0 4px 26px rgba(227,24,55,0.3)":"none"}}>
+      {isFirstRun?"✓ SAVE & BUILD MY FIRST WORKOUT":changed?"✓ SAVE & REBUILD WORKOUT":"NO CHANGES"}
+    </button>
+  </div>);
+}
+
+// ─── App ──────────────────────────────────────────────────────────────────────
+function App(){
+  const[appState,setAppState]=useState(null);
+  const[view,setView]=useState("workout");
+  const[workout,setWorkout]=useState(null);
+  const[generating,setGenerating]=useState(false);
+  const[sessionSets,setSessionSets]=useState({});
+  const[sessionWeights,setSessionWeights]=useState({});
+  const[sessionRatings,setSessionRatings]=useState({});
+  const[sessionSetWeights,setSessionSetWeights]=useState({});
+  const[done,setDone]=useState(false);
+  const[summary,setSummary]=useState(null); // post-workout summary
+  const[loaded,setLoaded]=useState(false);
+  const[repPicker,setRepPicker]=useState(null);
+  const[remixingId,setRemixingId]=useState(null);
+  const[restTimer,setRestTimer]=useState(null);
+  const[histModal,setHistModal]=useState(null);
+  const[showDayPicker,setShowDayPicker]=useState(false);
+  const restRef=useRef(null);
+  const hasGenerated=useRef(false);
+
+  // rest timer tick
+  useEffect(()=>{
+    if(!restTimer||restTimer.remaining<=0){clearInterval(restRef.current);if(restTimer?.remaining===0)setTimeout(()=>setRestTimer(null),800);return;}
+    restRef.current=setInterval(()=>setRestTimer(p=>p?{...p,remaining:p.remaining-1}:null),1000);
+    return()=>clearInterval(restRef.current);
+  },[restTimer?.remaining]);
+
+  function getRestSecs(ex){return["Quads","Glutes","Hamstrings","Back","Lats","Chest","Upper Chest","Lower Chest"].includes(ex?.muscleGroup)?90:60;}
+  function startRest(ex,hasNext){if(!hasNext)return;clearInterval(restRef.current);const s=getRestSecs(ex);setRestTimer({exId:ex.id,exName:ex.name,remaining:s,total:s});}
+  function skipRest(){clearInterval(restRef.current);setRestTimer(null);}
+
+  // load storage
+  useEffect(()=>{
+    try{
+      const saved=localStorage.getItem(STORAGE_KEY);
+      if(saved){
+        const p=JSON.parse(saved);
+        if(!p.focus)p.focus={...DEFAULT_FOCUS};
+        if(p.focus.skipAnkle===undefined)p.focus.skipAnkle=false;
+        if(p.focus.workoutDuration===undefined)p.focus.workoutDuration=45;
+        if(p.focusConfigured===undefined)p.focusConfigured=false;
+        if(!p.exerciseHistory)p.exerciseHistory={};
+        setAppState(p);
+      }else{
+        setAppState({cycleIdx:0,sessions:0,weights:SEED_WEIGHTS,history:[],exerciseHistory:{},seeded:true,focus:{...DEFAULT_FOCUS},focusConfigured:false});
+      }
+    }catch{setAppState({cycleIdx:0,sessions:0,weights:SEED_WEIGHTS,history:[],exerciseHistory:{},seeded:true,focus:{...DEFAULT_FOCUS},focusConfigured:false});}
+    setLoaded(true);
+  },[]);
+
+  useEffect(()=>{
+    if(!loaded||!appState||hasGenerated.current)return;
+    if(!appState.focusConfigured)return;
+    hasGenerated.current=true;kickoff(appState);
+  },[loaded,appState]);
+
+  function persist(ns){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(ns));}catch{}setAppState(ns);return ns;}
+  function updateFocus(f){return persist({...appState,focus:f});}
+
+  async function kickoff(state,overrideDayIdx=null){
+    setGenerating(true);setDone(false);setWorkout(null);setSummary(null);
+    const idx=overrideDayIdx!==null?overrideDayIdx:(state.cycleIdx%3);
+    const dayType=DAY_TYPES[idx];
+    const recentIds=state.history.slice(0,3).flatMap(h=>h.exerciseIds||[]);
+    const perfNotes=buildPerfNotes(state.history,state.weights);
+    const focus=state.focus||DEFAULT_FOCUS;
+    let w;
+    try{w=await tryAIWorkout(dayType,state.sessions+1,recentIds,perfNotes,state.weights,focus);}
+    catch{w=getFallback(dayType.id,state.sessions,recentIds,focus);}
+    // STORE dayIdx on workout so finish knows which day we actually did
+    setWorkout({...w,dayType,dayIdx:idx});
+    const wts={},sets={},ratings={},setWts={};
+    w.exercises.forEach(ex=>{
+      wts[ex.id]=getRec(ex.id,ex.startWeight,state.weights,focus).weight;
+      sets[ex.id]=Array(ex.sets).fill(null);
+      ratings[ex.id]=Array(ex.sets).fill(null);
+      setWts[ex.id]=Array(ex.sets).fill(null);
+    });
+    setSessionWeights(wts);setSessionSets(sets);setSessionRatings(ratings);setSessionSetWeights(setWts);
+    setGenerating(false);
+  }
+
+  async function remixExercise(exId){
+    if(!workout||!appState)return;setRemixingId(exId);
+    const ex=workout.exercises.find(e=>e.id===exId);
+    const others=workout.exercises.filter(e=>e.id!==exId).map(e=>e.name);
+    const focus=appState.focus||DEFAULT_FOCUS;
+    let newEx;try{newEx=await tryAIRemix(ex,others,workout.dayType,appState.weights,focus);}catch{newEx=fallbackRemix(ex,others,workout.dayType.id,focus);}
+    setWorkout(prev=>({...prev,exercises:prev.exercises.map(e=>e.id===exId?newEx:e)}));
+    setSessionSets(prev=>({...prev,[newEx.id]:Array(newEx.sets).fill(null)}));
+    setSessionRatings(prev=>({...prev,[newEx.id]:Array(newEx.sets).fill(null)}));
+    setSessionSetWeights(prev=>({...prev,[newEx.id]:Array(newEx.sets).fill(null)}));
+    setSessionWeights(prev=>({...prev,[newEx.id]:getRec(newEx.id,newEx.startWeight,appState.weights,focus).weight}));
+    setRemixingId(null);
+  }
+
+  function logReps(exId,setIdx,reps,rating){
+    const snapWeight=sessionWeights[exId]??0;
+    setSessionSets(p=>({...p,[exId]:p[exId].map((v,j)=>j===setIdx?reps:v)}));
+    setSessionRatings(p=>({...p,[exId]:p[exId].map((v,j)=>j===setIdx?rating:v)}));
+    setSessionSetWeights(p=>({...p,[exId]:p[exId].map((v,j)=>j===setIdx?snapWeight:v)}));
+    setRepPicker(null);
+    if(workout){const ex=workout.exercises.find(e=>e.id===exId);if(ex){const lc=(sessionSets[exId]||[]).filter(r=>r!==null).length+1;startRest(ex,lc<ex.sets);}}
+  }
+  function openPicker(exId,setIdx,target){const cur=sessionSets[exId]?.[setIdx];setRepPicker({exId,setIdx,target,value:(cur!==null&&cur!==undefined)?cur:target,rating:sessionRatings[exId]?.[setIdx]||null});}
+  // FIX: 0.5kg steps
+  function adjWeight(exId,d){setSessionWeights(p=>({...p,[exId]:Math.max(0,+((p[exId]||0)+d).toFixed(1))}));}
+
+  async function finishWorkout(){
+    if(!workout||!appState)return;
+    const newW={...appState.weights};
+    const newExHist={...(appState.exerciseHistory||{})};
+    const summaryRows=[];
+
+    workout.exercises.forEach(ex=>{
+      const sets=sessionSets[ex.id]||[];
+      const logged=sets.filter(r=>r!==null);
+      const avgReps=logged.length?logged.reduce((a,b)=>a+b,0)/logged.length:0;
+      const w=sessionWeights[ex.id]??ex.startWeight;
+      const ratings=(sessionRatings[ex.id]||[]).filter(Boolean);
+      const lightCount=ratings.filter(r=>r==="light").length;
+      const failedCount=ratings.filter(r=>r==="failed").length;
+      const inc=ex.weightIncrement||2.5;
+      let dec=getWeightDecision(avgReps,ex.reps,inc);
+      if(lightCount>=Math.ceil(logged.length/2)&&avgReps>=ex.reps)dec={action:"increase",delta:inc,label:`Felt too light — up ${inc}kg`,color:"#69f0ae"};
+      if(failedCount>0&&dec.action==="increase")dec={action:"hold",delta:0,label:"Near failure — hold weight",color:"#ffd740"};
+      const nextW=Math.max(0,+(w+dec.delta).toFixed(1));
+      newW[ex.id]={weight:nextW,lastWeight:w,lastAvgReps:avgReps,lastTargetReps:ex.reps,weightIncrement:inc,lastCompleted:logged.length===ex.sets,lastRatings:ratings};
+
+      // per-exercise history entry
+      const histEntry={date:new Date().toLocaleDateString("en-AU"),weight:w,avgReps:avgReps||null,targetReps:ex.reps,setsLogged:logged.length,totalSets:ex.sets,dayId:workout.dayType.id,equipNum:ex.equipNum};
+      if(!newExHist[ex.id])newExHist[ex.id]=[];
+      newExHist[ex.id]=[...newExHist[ex.id],histEntry].slice(-50);
+
+      summaryRows.push({name:ex.name,equipNum:ex.equipNum,setsLogged:logged.length,totalSets:ex.sets,avgReps:avgReps||null,targetReps:ex.reps,weight:w,nextWeight:nextW,delta:dec.delta,deltaColor:dec.color,sets:sets.map((r,i)=>({reps:r,weight:sessionSetWeights[ex.id]?.[i]||null}))});
+    });
+
+    const entry={date:new Date().toLocaleDateString("en-AU"),time:new Date().toLocaleTimeString("en-AU",{hour:"2-digit",minute:"2-digit"}),dayId:workout.dayType.id,dayName:workout.dayType.name,sessionTitle:workout.sessionTitle,exerciseIds:workout.exercises.map(e=>e.id),weights:{...sessionWeights},repData:Object.fromEntries(workout.exercises.map(ex=>[ex.id,sessionSets[ex.id]])),ratingData:Object.fromEntries(workout.exercises.map(ex=>[ex.id,sessionRatings[ex.id]])),wasAI:!workout.isFallback,focusSnapshot:{...(appState.focus||DEFAULT_FOCUS)}};
+
+    // FIX: advance cycle from the day we ACTUALLY did (workout.dayIdx), not stale appState.cycleIdx
+    const nextCycleIdx=((workout.dayIdx!==undefined?workout.dayIdx:appState.cycleIdx)+1)%3;
+    const ns={...appState,cycleIdx:nextCycleIdx,sessions:appState.sessions+1,weights:newW,exerciseHistory:newExHist,history:[entry,...appState.history].slice(0,40)};
+    persist(ns);
+
+    setSummary({rows:summaryRows,dayType:workout.dayType,sessionNum:appState.sessions+1,nextDayType:DAY_TYPES[nextCycleIdx]});
+    setDone(true);
+  }
+
+  if(!loaded||!appState)return(<div style={{minHeight:"100vh",background:"#0e0e0e",display:"flex",alignItems:"center",justifyContent:"center"}}><style>{appStyle}</style><div style={{width:40,height:40,border:"3px solid #222",borderTopColor:"#e31837",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/></div>);
+
+  if(!appState.focusConfigured){
+    if(view==="focusSetup")return(<div style={{minHeight:"100vh",background:"#0e0e0e",fontFamily:"'DM Sans',sans-serif",color:"#f0f0f0"}}><style>{appStyle}</style><div style={{background:"#0e0e0e",borderBottom:"1px solid #1c1c1c",padding:"0 16px"}}><div style={{maxWidth:600,margin:"0 auto",height:56,display:"flex",alignItems:"center",gap:10}}><SnapLogo height={26}/><div style={{width:1,height:18,background:"#2a2a2a"}}/><div><div style={{fontFamily:"Bebas Neue",fontSize:"0.95rem",color:"#ccc",letterSpacing:"0.12em"}}>WATAGAN PARK</div><div style={{fontSize:"0.58rem",color:"#444",marginTop:2}}>First-time setup</div></div></div></div><div style={{maxWidth:600,margin:"0 auto",padding:"0 16px"}}><FocusView focus={appState.focus||DEFAULT_FOCUS} onUpdate={updateFocus} isFirstRun={true} onApply={(nf)=>{const ns=persist({...appState,focus:nf,focusConfigured:true});hasGenerated.current=false;setView("workout");kickoff(ns);}}/></div></div>);
+    return <SetupGate onBegin={()=>setView("focusSetup")}/>;
+  }
+
+  const focus=appState.focus||DEFAULT_FOCUS;
+  const dayType=workout?.dayType||DAY_TYPES[appState.cycleIdx%3];
+  const totalSets=workout?workout.exercises.reduce((s,ex)=>s+ex.sets,0):0;
+  const completedSets=Object.values(sessionSets).flat().filter(r=>r!==null).length;
+  const pct=totalSets>0?(completedSets/totalSets)*100:0;
+  const allComplete=totalSets>0&&completedSets===totalSets;
+  const activeBadges=[focus.trainingFocus!=="balanced"&&{label:focus.trainingFocus==="upper"?"💪 Upper":focus.trainingFocus==="lower"?"🦵 Lower":"🎯 Core",color:"#e31837"},focus.deload&&{label:"📉 Deload",color:"#ffa040"},focus.skipKnees&&{label:"🦵 No Knees",color:"#ffd740"},focus.skipAnkle&&{label:"🦶 No Ankle",color:"#ffd740"},focus.skipShoulders&&{label:"💆 No Shoulder",color:"#ffd740"},focus.skipBack&&{label:"🔙 No Back",color:"#ffd740"},focus.skipChest&&{label:"🫁 No Chest",color:"#ffd740"}].filter(Boolean);
+
+  return(<div style={{minHeight:"100vh",background:"#0e0e0e",fontFamily:"'DM Sans',sans-serif",color:"#f0f0f0",paddingBottom:130}}>
+    <style>{appStyle}</style>
+    {repPicker&&<RepPicker target={repPicker.target} value={repPicker.value} onChange={v=>setRepPicker(p=>({...p,value:v}))} rating={repPicker.rating||null} onRate={r=>setRepPicker(p=>({...p,rating:r}))} onClose={()=>logReps(repPicker.exId,repPicker.setIdx,repPicker.value,repPicker.rating||null)}/>}
+    {histModal&&<ExerciseHistoryModal exId={histModal.id} exName={histModal.name} history={appState.exerciseHistory||{}} onClose={()=>setHistModal(null)}/>}
+    {showDayPicker&&<DayPickerModal currentIdx={appState.cycleIdx%3} onPick={(i)=>{hasGenerated.current=true;kickoff(appState,i);}} onClose={()=>setShowDayPicker(false)}/>}
+
+    {/* HEADER */}
+    <div style={{background:"#0e0e0e",position:"sticky",top:0,zIndex:100,borderBottom:"1px solid #1c1c1c"}}>
+      <div style={{maxWidth:600,margin:"0 auto"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px 8px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <SnapLogo height={26}/><div style={{width:1,height:20,background:"#2a2a2a",flexShrink:0}}/>
+            <div><div style={{fontFamily:"Bebas Neue",fontSize:"0.95rem",color:"#ccc",letterSpacing:"0.12em",lineHeight:1}}>WATAGAN PARK</div><div style={{fontSize:"0.58rem",color:"#444",marginTop:2}}>Session #{appState.sessions+1} · Cycle {Math.floor(appState.sessions/3)+1}</div></div>
+          </div>
+          {activeBadges.length>0&&(<div style={{display:"flex",gap:4,flexWrap:"nowrap",overflow:"hidden",maxWidth:180}}>{activeBadges.slice(0,3).map((b,i)=>(<span key={i} onClick={()=>setView("focus")} style={{fontSize:"0.55rem",fontWeight:700,color:b.color,background:`${b.color}15`,border:`1px solid ${b.color}40`,padding:"2px 6px",borderRadius:20,whiteSpace:"nowrap",cursor:"pointer",flexShrink:0}}>{b.label}</span>))}{activeBadges.length>3&&<span style={{fontSize:"0.55rem",color:"#555",padding:"2px 4px",flexShrink:0}}>+{activeBadges.length-3}</span>}</div>)}
+        </div>
+        <div style={{display:"flex",borderTop:"1px solid #1a1a1a"}}>
+          {[{v:"workout",label:"Today",icon:"⚡"},{v:"history",label:"Log",icon:"📋"},{v:"weights",label:"Weights",icon:"🏋️"},{v:"focus",label:"Focus",icon:"🎯",hasBadge:activeBadges.length>0}].map(({v,label,icon,hasBadge})=>{const active=view===v;return(<button key={v} onClick={()=>setView(v)} style={{flex:1,border:"none",background:"transparent",cursor:"pointer",padding:"8px 4px 10px",position:"relative",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}><div style={{position:"absolute",top:0,left:"20%",right:"20%",height:2,borderRadius:"0 0 2px 2px",background:active?"#e31837":"transparent"}}/><span style={{fontSize:"0.85rem",lineHeight:1,opacity:active?1:0.4}}>{icon}</span><span style={{fontSize:"0.6rem",fontWeight:active?700:500,color:active?"#f0f0f0":"#555",letterSpacing:"0.04em"}}>{label.toUpperCase()}</span>{hasBadge&&!active&&<div style={{position:"absolute",top:6,right:"28%",width:5,height:5,borderRadius:"50%",background:"#e31837"}}/>}</button>);})}
+        </div>
+      </div>
+    </div>
+
+    <div style={{maxWidth:600,margin:"0 auto",padding:"0 16px"}}>
+
+      {/* WORKOUT VIEW */}
+      {view==="workout"&&!done&&(<>
+        {generating&&(<div style={{padding:"60px 20px",textAlign:"center",animation:"fadeIn 0.4s ease"}}><div style={{width:48,height:48,border:"3px solid #1e1e1e",borderTopColor:dayType.color,borderRadius:"50%",animation:"spin 0.9s linear infinite",margin:"0 auto 20px"}}/><div style={{fontFamily:"Bebas Neue",fontSize:"1.8rem",color:"#f0f0f0",letterSpacing:"0.1em",marginBottom:10}}>BUILDING YOUR WORKOUT</div></div>)}
+
+        {workout&&!generating&&(<>
+          <div style={{padding:"20px 0 10px",animation:"slideUp 0.4s ease"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",alignItems:"baseline",gap:10,flexWrap:"wrap"}}><div style={{fontFamily:"Bebas Neue",fontSize:"2.8rem",color:dayType.color,lineHeight:1,letterSpacing:"0.05em"}}>{dayType.label}</div><div style={{fontFamily:"Bebas Neue",fontSize:"1.4rem",color:"#f0f0f0",lineHeight:1,letterSpacing:"0.05em"}}>{dayType.name.toUpperCase()}</div></div>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginTop:3}}>
+                  <div style={{fontFamily:"Bebas Neue",fontSize:"1rem",color:"#777",letterSpacing:"0.08em"}}>{workout.sessionTitle?.toUpperCase()}</div>
+                  <span onClick={()=>setView("focus")} style={{fontSize:"0.6rem",color:getDurationConfig(focus.workoutDuration||45).color,background:`${getDurationConfig(focus.workoutDuration||45).color}18`,border:`1px solid ${getDurationConfig(focus.workoutDuration||45).color}44`,padding:"2px 8px",borderRadius:20,cursor:"pointer",whiteSpace:"nowrap",fontWeight:700}}>⏱ {focus.workoutDuration||45}min</span>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:6,flexShrink:0}}>
+                <button onClick={()=>setShowDayPicker(true)} style={{background:"#1a1a1a",border:"1px solid #2e2e2e",color:"#4fc3f7",borderRadius:10,padding:"8px 10px",cursor:"pointer",textAlign:"center",fontSize:"0.6rem",lineHeight:1.5}}><div style={{fontSize:"1rem"}}>📅</div><div>day</div></button>
+                <button onClick={()=>{hasGenerated.current=true;kickoff(appState);}} style={{background:"#1a1a1a",border:"1px solid #2e2e2e",color:"#777",borderRadius:10,padding:"8px 10px",cursor:"pointer",textAlign:"center",fontSize:"0.6rem",lineHeight:1.5}}><div style={{fontSize:"1.1rem"}}>🔀</div><div>remix</div></button>
+              </div>
+            </div>
+            <div style={{marginTop:12,background:"#141414",border:"1px solid #252525",borderRadius:12,padding:"12px 14px"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:"0.75rem"}}>{workout.isFallback?"📋":"🤖"}</span><span style={{fontSize:"0.72rem",color:"#999",fontStyle:"italic",flex:1}}>{workout.focusTip}</span></div>
+            </div>
+          </div>
+
+          <div style={{marginBottom:16}}>
+            {(()=>{const estSecs=workout.exercises.reduce((t,ex)=>{const rp=["Quads","Glutes","Hamstrings","Back","Lats","Chest","Upper Chest","Lower Chest"].includes(ex.muscleGroup)?90:60;return t+(ex.sets*45)+((ex.sets-1)*rp);},0);const em=Math.round(estSecs/60);return(<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:"0.68rem",color:"#444",fontWeight:700,letterSpacing:"0.08em"}}>PROGRESS</span><span style={{fontSize:"0.6rem",color:"#333",background:"#1a1a1a",border:"1px solid #252525",padding:"1px 7px",borderRadius:20}}>⏱ ~{em} min</span></div><span style={{fontSize:"0.68rem",color:pct===100?"#69f0ae":"#e31837",fontWeight:700}}>{completedSets}/{totalSets} sets</span></div>);})()}
+            <div style={{height:5,background:"#1a1a1a",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:pct===100?"linear-gradient(90deg,#69f0ae,#00e676)":"linear-gradient(90deg,#e31837,#ff6b6b)",borderRadius:3,transition:"width 0.4s ease"}}/></div>
+          </div>
+
+          {workout.exercises.map((ex,ei)=>{
+            const isRemixing=remixingId===ex.id;
+            const rec=getRec(ex.id,ex.startWeight,appState.weights,focus);
+            const curW=sessionWeights[ex.id]??ex.startWeight;
+            const sets=sessionSets[ex.id]||Array(ex.sets).fill(null);
+            const loggedArr=sets.filter(r=>r!==null);
+            const avgReps=loggedArr.length?loggedArr.reduce((a,b)=>a+b,0)/loggedArr.length:0;
+            const allLogged=loggedArr.length===ex.sets;
+            const repColor=!loggedArr.length?"#555":avgReps>=ex.reps?"#69f0ae":avgReps>=ex.reps*0.75?"#ffd740":"#ff6b6b";
+            const exRatings=sessionRatings[ex.id]||Array(ex.sets).fill(null);
+            const exSetWeights=sessionSetWeights[ex.id]||Array(ex.sets).fill(null);
+            const lastLoggedIdx=sets.map((r,i)=>r!==null?i:-1).filter(i=>i>=0).pop();
+            const nextUnloggedIdx=sets.findIndex(r=>r===null);
+            const snapW=lastLoggedIdx!==undefined?exSetWeights[lastLoggedIdx]:null;
+            const suggestion=(lastLoggedIdx!==undefined&&nextUnloggedIdx!==-1&&nextUnloggedIdx===lastLoggedIdx+1&&snapW!==null)?getNextSetSuggestion(snapW,sets[lastLoggedIdx],ex.reps,exRatings[lastLoggedIdx],ex.weightIncrement):null;
+            return(<div key={ex.id} style={{background:isRemixing?"#0d0d18":allLogged?"#081510":"#161616",border:`1px solid ${isRemixing?"#2a2a50":allLogged?"#1a4028":"#212121"}`,borderRadius:14,padding:"15px 14px",marginBottom:12,animation:`slideUp 0.4s ease ${ei*0.07}s both`,transition:"all 0.3s"}}>
+              {isRemixing?(<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px 0",gap:10}}><div style={{width:30,height:30,border:"2.5px solid #1e1e3a",borderTopColor:"#7c7cff",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/><div style={{fontSize:"0.72rem",color:"#7c7cff",fontWeight:600}}>Finding same-muscle alternative...</div></div>):(<>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+                  <div style={{flex:1,paddingRight:10}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}><span style={{background:"#e31837",color:"#fff",fontSize:"0.58rem",fontWeight:700,padding:"2px 8px",borderRadius:4,whiteSpace:"nowrap"}}>STATION #{ex.equipNum}</span>{ex.muscleGroup&&<span style={{background:"#252525",color:"#666",fontSize:"0.54rem",padding:"2px 6px",borderRadius:4}}>{ex.muscleGroup}</span>}{allLogged&&<span style={{color:"#69f0ae",fontSize:"0.72rem"}}>✓</span>}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:2}}><div style={{fontFamily:"Bebas Neue",fontSize:"1.25rem",letterSpacing:"0.04em",color:allLogged?"#69f0ae":"#f0f0f0",lineHeight:1.2}}>{ex.name.toUpperCase()}</div><button onClick={()=>remixExercise(ex.id)} style={{background:"#1e1e2e",border:"1px solid #2a2a45",color:"#7c7cff",borderRadius:7,padding:"3px 8px",cursor:"pointer",fontSize:"0.58rem",display:"flex",alignItems:"center",gap:3,whiteSpace:"nowrap"}}><span>🔀</span><span>busy?</span></button></div>
+                    <div style={{fontSize:"0.65rem",color:"#555"}}>{ex.sets} sets × {ex.reps} reps target</div>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,minWidth:100}}>
+                    <div style={{fontSize:"0.58rem",color:rec.badgeColor,fontWeight:700,textAlign:"center"}}>{rec.badge}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:4}}>
+                      {/* FIX: 0.5kg steps */}
+                      <button onClick={()=>adjWeight(ex.id,-0.5)} style={{width:28,height:28,borderRadius:7,border:"1px solid #2a2a2a",background:"#1a1a1a",color:"#888",fontSize:"1.1rem",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
+                      <div style={{textAlign:"center",minWidth:52}}><div style={{fontFamily:"Bebas Neue",fontSize:"1.85rem",color:"#f0f0f0",lineHeight:1}}>{curW}</div><div style={{fontSize:"0.58rem",color:"#444"}}>kg</div></div>
+                      <button onClick={()=>adjWeight(ex.id,+0.5)} style={{width:28,height:28,borderRadius:7,border:"1px solid #2a2a2a",background:"#1a1a1a",color:"#888",fontSize:"1.1rem",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+                    </div>
+                    <div style={{fontSize:"0.54rem",color:"#555",textAlign:"center",maxWidth:100,lineHeight:1.3}}>0.5kg steps</div>
+                    <div style={{fontSize:"0.54rem",color:"#666",textAlign:"center",maxWidth:100,lineHeight:1.3}}>{rec.detail}</div>
+                  </div>
+                </div>
+                {suggestion&&(<div style={{marginBottom:8,background:"#111",border:`1px solid ${suggestion.color}44`,borderRadius:8,padding:"7px 12px",display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:"0.8rem",flexShrink:0}}>💬</span><span style={{fontSize:"0.68rem",color:suggestion.color,fontWeight:600,flex:1}}>{suggestion.msg}</span></div>)}
+                <div style={{display:"flex",gap:6}}>{sets.map((reps,i)=>{const logged=reps!==null;const ratio=logged?reps/ex.reps:0;const ri=exRatings[i];const rInfo=ri?EFFORT_RATINGS.find(r=>r.key===ri):null;const bg=!logged?"#181818":ratio>=1?"#1a3d20":ratio>=0.75?"#2a2a0a":"#2a1010";const tc=!logged?"#555":ratio>=1?"#69f0ae":ratio>=0.75?"#ffd740":"#ff6b6b";const bc=!logged?"#252525":ratio>=1?"#2a5c30":ratio>=0.75?"#4a4a10":"#5c1818";return(<button key={i} onClick={()=>openPicker(ex.id,i,ex.reps)} style={{flex:1,minHeight:56,borderRadius:9,border:`1.5px solid ${bc}`,background:bg,color:tc,fontSize:"0.68rem",fontWeight:700,cursor:"pointer",transition:"all 0.2s",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"4px 2px"}}>{logged?<><span style={{fontSize:"0.54rem",opacity:0.6,marginBottom:1}}>SET {i+1}</span><span style={{fontFamily:"Bebas Neue",fontSize:"1.5rem",lineHeight:1}}>{reps}</span><span style={{fontSize:"0.54rem",opacity:0.7,marginTop:1}}>reps</span>{exSetWeights[i]&&<span style={{fontSize:"0.52rem",opacity:0.55,marginTop:2}}>{exSetWeights[i]}kg</span>}{rInfo&&<span style={{fontSize:"0.7rem",lineHeight:1,marginTop:1}}>{rInfo.emoji}</span>}</>:<><span style={{fontSize:"0.62rem",fontWeight:600}}>SET {i+1}</span><span style={{fontSize:"0.55rem",opacity:0.4,marginTop:2}}>tap to log</span></>}</button>);})}
+                </div>
+                {loggedArr.length>0&&(<div style={{marginTop:8,display:"flex",alignItems:"center",gap:8}}><div style={{flex:1,height:3,background:"#1e1e1e",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(100,(avgReps/ex.reps)*100)}%`,background:repColor,borderRadius:2,transition:"width 0.3s"}}/></div><span style={{fontSize:"0.62rem",color:repColor,fontWeight:700,whiteSpace:"nowrap"}}>avg {avgReps.toFixed(1)} / {ex.reps}</span><button onClick={()=>{setSessionSets(p=>({...p,[ex.id]:Array(ex.sets).fill(null)}));setSessionRatings(p=>({...p,[ex.id]:Array(ex.sets).fill(null)}));setSessionSetWeights(p=>({...p,[ex.id]:Array(ex.sets).fill(null)}));}} style={{background:"transparent",border:"1px solid #2e2e2e",color:"#555",borderRadius:6,padding:"2px 7px",cursor:"pointer",fontSize:"0.6rem",whiteSpace:"nowrap",flexShrink:0}}>↩ undo</button></div>)}
+                {ex.note&&<div style={{marginTop:8,fontSize:"0.66rem",color:"#666",background:"#111",borderRadius:6,padding:"5px 10px",lineHeight:1.5}}>💡 {ex.note}</div>}
+              </>)}
+            </div>);
+          })}
+        </>)}
+
+        {workout&&!generating&&(<div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:50}}>
+          {restTimer&&restTimer.remaining>0&&(()=>{const p=(restTimer.remaining/restTimer.total)*100;const urgent=restTimer.remaining<=10;const tc=urgent?"#ff6b6b":restTimer.remaining<=30?"#ffd740":"#69f0ae";const mins=Math.floor(restTimer.remaining/60);const secs=restTimer.remaining%60;const ts=mins>0?`${mins}:${secs.toString().padStart(2,"0")}`:`${secs}s`;return(<div style={{background:"#111",borderTop:`2px solid ${tc}`,padding:"10px 16px 6px"}}><div style={{maxWidth:600,margin:"0 auto"}}><div style={{height:3,background:"#1e1e1e",borderRadius:2,overflow:"hidden",marginBottom:8}}><div style={{height:"100%",width:`${p}%`,background:tc,borderRadius:2,transition:"width 1s linear"}}/></div><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{flex:1}}><div style={{fontSize:"0.58rem",color:"#555",fontWeight:700,letterSpacing:"0.08em",marginBottom:1}}>REST TIMER</div><div style={{fontSize:"0.65rem",color:"#777"}}>Next: {restTimer.exName}</div></div><div style={{fontFamily:"Bebas Neue",fontSize:"2.2rem",color:tc,lineHeight:1,animation:urgent?"pulse 0.6s infinite":"none",minWidth:54,textAlign:"center"}}>{ts}</div><button onClick={skipRest} style={{background:"#1e1e1e",border:`1px solid ${tc}55`,color:tc,borderRadius:10,padding:"8px 14px",cursor:"pointer",fontFamily:"Bebas Neue",fontSize:"0.85rem",whiteSpace:"nowrap"}}>SKIP →</button></div></div></div>);})()}
+          <div style={{padding:"10px 16px 22px",background:"linear-gradient(transparent,#0e0e0e 35%)"}}><div style={{maxWidth:600,margin:"0 auto",display:"flex",gap:8}}>
+            {!allComplete&&completedSets>0&&(<button onClick={()=>{if(confirm(`Only ${completedSets}/${totalSets} sets logged — finish early?`))finishWorkout();}} style={{flex:"0 0 auto",height:52,padding:"0 16px",borderRadius:14,border:"1px solid #333",cursor:"pointer",fontFamily:"Bebas Neue",fontSize:"0.85rem",background:"#1a1a1a",color:"#888",lineHeight:1.2}}>FINISH<br/>EARLY</button>)}
+            <button onClick={()=>{if(allComplete)finishWorkout();else if(completedSets===0){if(confirm("No sets logged — still finish?"))finishWorkout();}}} disabled={!allComplete&&completedSets===0} style={{flex:1,height:52,borderRadius:14,border:"none",cursor:allComplete?"pointer":completedSets===0?"not-allowed":"pointer",fontFamily:"Bebas Neue",fontSize:"1.1rem",letterSpacing:"0.08em",transition:"all 0.3s",background:allComplete?"linear-gradient(135deg,#e31837,#ff4d6a)":"#161616",color:allComplete?"#fff":"#333",boxShadow:allComplete?"0 4px 26px rgba(227,24,55,0.35)":"none",animation:allComplete?"pulse 2s infinite":"none"}}>
+              {allComplete?"✓ COMPLETE SESSION":`${totalSets-completedSets} SETS REMAINING`}
+            </button>
+          </div></div>
+        </div>)}
+      </>)}
+
+      {/* DONE VIEW — Session Summary */}
+      {view==="workout"&&done&&summary&&(<div style={{paddingTop:20,paddingBottom:20,animation:"fadeIn 0.6s ease"}}>
+        <div style={{textAlign:"center",marginBottom:20}}>
+          <div style={{fontSize:"3rem",marginBottom:8}}>🔥</div>
+          <div style={{fontFamily:"Bebas Neue",fontSize:"2.4rem",color:"#e31837",letterSpacing:"0.05em"}}>SESSION DONE!</div>
+          <div style={{fontSize:"0.78rem",color:"#666",marginTop:4}}>Session #{summary.sessionNum} · {summary.dayType.name}</div>
+        </div>
+
+        {/* Session Summary Table */}
+        <div style={{background:"#141414",border:"1px solid #222",borderRadius:14,padding:"16px",marginBottom:14}}>
+          <div style={{fontSize:"0.62rem",color:"#e31837",fontWeight:700,letterSpacing:"0.1em",marginBottom:12}}>📋 SESSION SUMMARY</div>
+          {summary.rows.map((row,i)=>(
+            <div key={i} style={{borderBottom:i<summary.rows.length-1?"1px solid #1c1c1c":"none",paddingBottom:i<summary.rows.length-1?10:0,marginBottom:i<summary.rows.length-1?10:0}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
+                <div style={{flex:1,paddingRight:8}}>
+                  <div style={{fontSize:"0.72rem",color:"#ccc",fontWeight:600}}>{row.name}</div>
+                  <div style={{fontSize:"0.58rem",color:"#555",marginTop:2}}>Station #{row.equipNum} · {row.setsLogged}/{row.totalSets} sets completed</div>
+                </div>
+                <div style={{textAlign:"right",flexShrink:0}}>
+                  <div style={{fontSize:"0.78rem",color:"#f0f0f0",fontWeight:700}}>{row.weight}kg</div>
+                  <div style={{fontSize:"0.58rem",color:row.delta>0?"#69f0ae":row.delta<0?"#ff6b6b":"#555"}}>{row.delta>0?`↑ ${row.nextWeight}kg next`:row.delta<0?`↓ ${row.nextWeight}kg next`:"→ hold"}</div>
+                </div>
+              </div>
+              {/* Per-set breakdown */}
+              <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                {row.sets.map((s,si)=>{
+                  if(s.reps===null)return<div key={si} style={{fontSize:"0.6rem",color:"#333",background:"#1a1a1a",borderRadius:5,padding:"2px 7px"}}>S{si+1}: —</div>;
+                  const ratio=s.reps/row.targetReps;const tc=ratio>=1?"#69f0ae":ratio>=0.75?"#ffd740":"#ff6b6b";
+                  return<div key={si} style={{fontSize:"0.6rem",color:tc,background:"#1a1a1a",borderRadius:5,padding:"2px 7px",whiteSpace:"nowrap"}}>S{si+1}: {s.reps}r{s.weight?` @${s.weight}kg`:""}</div>;
+                })}
+              </div>
+              {row.avgReps!=null&&<div style={{fontSize:"0.6rem",color:"#555",marginTop:4}}>Avg {row.avgReps.toFixed(1)} / {row.targetReps} reps target</div>}
+            </div>
+          ))}
+        </div>
+
+        {/* Next session */}
+        <div style={{background:"#0d1520",border:"1px solid #1c3050",borderRadius:14,padding:"14px 18px",marginBottom:16,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div><div style={{fontSize:"0.62rem",color:"#4fc3f7",fontWeight:700,letterSpacing:"0.1em",marginBottom:4}}>NEXT UP</div><div style={{fontFamily:"Bebas Neue",fontSize:"1.4rem",color:"#f0f0f0",letterSpacing:"0.05em"}}>{summary.nextDayType.label} — {summary.nextDayType.name.toUpperCase()}</div></div>
+          <div style={{width:12,height:12,borderRadius:"50%",background:summary.nextDayType.color}}/>
+        </div>
+
+        {/* FIX: "Back to Tracker" now properly resets done + kicks off new workout */}
+        <button onClick={()=>{setDone(false);hasGenerated.current=true;kickoff(appState);}} style={{width:"100%",height:52,borderRadius:14,border:"none",cursor:"pointer",fontFamily:"Bebas Neue",fontSize:"1.1rem",letterSpacing:"0.08em",background:"linear-gradient(135deg,#e31837,#ff4d6a)",color:"#fff",boxShadow:"0 4px 20px rgba(227,24,55,0.3)"}}>
+          START NEXT SESSION →
+        </button>
+      </div>)}
+
+      {/* HISTORY VIEW */}
+      {view==="history"&&(<div style={{paddingTop:24,animation:"fadeIn 0.4s ease"}}>
+        <div style={{fontFamily:"Bebas Neue",fontSize:"2.2rem",color:"#f0f0f0",letterSpacing:"0.05em",marginBottom:4}}>SESSION LOG</div>
+        <div style={{fontSize:"0.72rem",color:"#666",marginBottom:20}}>{appState.sessions} session{appState.sessions!==1?"s":""} · No fixed schedule</div>
+        <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:12,padding:"14px",marginBottom:20}}>
+          <div style={{fontSize:"0.62rem",color:"#e31837",fontWeight:700,letterSpacing:"0.1em",marginBottom:10}}>CYCLE POSITION</div>
+          <div style={{display:"flex",gap:8}}>{DAY_TYPES.map((d,i)=>{const isNext=i===(appState.cycleIdx%3);return(<div key={d.id} style={{flex:1,background:isNext?"#1a0a0d":"#161616",border:`1.5px solid ${isNext?d.color:"#222"}`,borderRadius:10,padding:"10px 6px",textAlign:"center"}}><div style={{fontFamily:"Bebas Neue",fontSize:"1.1rem",color:isNext?d.color:"#333",letterSpacing:"0.08em"}}>{d.label}</div><div style={{fontSize:"0.58rem",color:isNext?"#888":"#2a2a2a",marginTop:2,lineHeight:1.3}}>{d.name}</div>{isNext&&<div style={{fontSize:"0.56rem",color:d.color,fontWeight:700,marginTop:4}}>▶ NEXT</div>}</div>);})}</div>
+        </div>
+        {appState.history.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:"#3a3a3a",fontSize:"0.82rem"}}>No sessions yet.</div>}
+        {appState.history.map((h,i)=>{const dt=DAY_TYPES.find(d=>d.id===h.dayId)||DAY_TYPES[0];return(<div key={i} style={{background:"#141414",border:"1px solid #1e1e1e",borderRadius:12,padding:"14px 15px",marginBottom:9}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}><div><div style={{display:"flex",alignItems:"center",gap:6}}><div style={{fontFamily:"Bebas Neue",fontSize:"1rem",color:"#f0f0f0",letterSpacing:"0.05em"}}>DAY {h.dayId} — {h.sessionTitle||h.dayName?.toUpperCase()}</div>{h.wasAI&&<span style={{fontSize:"0.55rem",color:"#555",background:"#1a1a1a",padding:"1px 5px",borderRadius:4}}>🤖</span>}</div><div style={{fontSize:"0.65rem",color:"#555"}}>{h.date} at {h.time}</div></div><div style={{background:dt.color,color:"#000",fontSize:"0.58rem",fontWeight:700,padding:"2px 8px",borderRadius:20}}>#{appState.sessions-i}</div></div>{h.repData&&(<div style={{display:"flex",flexWrap:"wrap",gap:5}}>{Object.entries(h.repData).map(([id,sets])=>{if(!sets||!sets.length)return null;const logged=sets.filter(r=>r!==null);const avg=logged.length?(logged.reduce((a,b)=>a+b,0)/logged.length).toFixed(1):"—";return<div key={id} style={{background:"#1a1a1a",borderRadius:5,padding:"2px 8px",fontSize:"0.6rem",color:"#777"}}>{id.replace(/_/g," ").split(" ")[0]} <span style={{color:"#e31837",fontWeight:700}}>{h.weights?.[id]??"-"}kg</span><span style={{color:"#555",marginLeft:3}}>{avg}r</span></div>;})}</div>)}</div>);})}
+        {appState.sessions>0&&(<div style={{marginTop:24,textAlign:"center",paddingBottom:20}}><button onClick={()=>{if(confirm("Reset session history? Weights are kept.")){persist({...appState,cycleIdx:0,sessions:0,history:[]});}}} style={{background:"transparent",border:"1px solid #222",color:"#3a3a3a",padding:"10px 22px",borderRadius:8,cursor:"pointer",fontSize:"0.7rem"}}>Reset Session History</button></div>)}
+      </div>)}
+
+      {/* WEIGHTS VIEW */}
+      {view==="weights"&&(<div style={{paddingTop:24,animation:"fadeIn 0.4s ease"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:4}}>
+          <div style={{fontFamily:"Bebas Neue",fontSize:"2.2rem",color:"#f0f0f0",letterSpacing:"0.05em"}}>YOUR WEIGHTS</div>
+          <button onClick={()=>exportCSV(appState.exerciseHistory)} style={{background:"#1a1a1a",border:"1px solid #2a2a2a",color:"#888",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:"0.65rem",display:"flex",alignItems:"center",gap:5,marginBottom:4,flexShrink:0}}>
+            <span>📥</span><span>Export CSV</span>
+          </button>
+        </div>
+        <div style={{fontSize:"0.72rem",color:"#666",marginBottom:16}}>Tap any exercise to see its history · Updates after every session</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:24}}>
+          {Object.entries(appState.weights).map(([id,w])=>{
+            const dec=w.lastAvgReps?getWeightDecision(w.lastAvgReps,w.lastTargetReps,w.weightIncrement||2.5):null;
+            const name=SEED_NAMES[id]||id.replace(/_/g," ");
+            const hc=(appState.exerciseHistory?.[id]||[]).length;
+            return(<div key={id} onClick={()=>setHistModal({id,name})} style={{background:"#161616",border:"1px solid #222",borderRadius:12,padding:"14px",cursor:"pointer",position:"relative",transition:"border-color 0.2s"}} onMouseEnter={e=>e.currentTarget.style.borderColor="#333"} onMouseLeave={e=>e.currentTarget.style.borderColor="#222"}>
+              <div style={{fontSize:"0.62rem",color:"#666",marginBottom:4,lineHeight:1.3}}>{name}</div>
+              <div style={{display:"flex",alignItems:"baseline",gap:4,marginBottom:4}}><span style={{fontFamily:"Bebas Neue",fontSize:"2rem",color:"#f0f0f0",lineHeight:1}}>{w.weight}</span><span style={{fontSize:"0.65rem",color:"#555"}}>kg</span>{dec&&<span style={{fontSize:"0.8rem",color:dec.color,marginLeft:4}}>{dec.action==="increase"?"↑":dec.action==="decrease"?"↓":"→"}</span>}</div>
+              {w.lastAvgReps?<div style={{fontSize:"0.58rem",color:"#555"}}>{Number(w.lastAvgReps).toFixed(1)} / {w.lastTargetReps} reps last</div>:<div style={{fontSize:"0.58rem",color:"#444"}}>× {w.lastTargetReps} reps</div>}
+              <div style={{position:"absolute",top:8,right:10,fontSize:"0.52rem",color:hc>0?"#444":"#2a2a2a"}}>{hc>0?`${hc} sessions`:"tap for history"}</div>
+            </div>);
+          })}
+        </div>
+      </div>)}
+
+      {/* FOCUS VIEW */}
+      {view==="focus"&&(<FocusView focus={focus} onUpdate={updateFocus} isFirstRun={false}
+        onDurationChange={(newFocus)=>{
+          // Instant save + rebuild when slider moves
+          const ns=persist({...appState,focus:newFocus});
+          hasGenerated.current=true;kickoff(ns);
+          setView("workout");
+        }}
+        onApply={(nf)=>{const ns=updateFocus(nf);hasGenerated.current=false;setView("workout");kickoff(ns);}}/>)}
+
+    </div>
+  </div>);
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
