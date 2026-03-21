@@ -929,9 +929,46 @@ function App(){
   const restRef=useRef(null);
   const hasGenerated=useRef(false);
 
+  function playBeep(type){
+    try{
+      const ctx=new(window.AudioContext||window.webkitAudioContext)();
+      const osc=ctx.createOscillator();
+      const gain=ctx.createGain();
+      osc.connect(gain);gain.connect(ctx.destination);
+      if(type==='go'){
+        // Two rising tones — "start your set"
+        const osc2=ctx.createOscillator();const gain2=ctx.createGain();
+        osc2.connect(gain2);gain2.connect(ctx.destination);
+        osc.type='sine';osc.frequency.setValueAtTime(523,ctx.currentTime);
+        gain.gain.setValueAtTime(0.35,ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.35);
+        osc.start(ctx.currentTime);osc.stop(ctx.currentTime+0.35);
+        osc2.type='sine';osc2.frequency.setValueAtTime(784,ctx.currentTime+0.18);
+        gain2.gain.setValueAtTime(0.001,ctx.currentTime+0.18);
+        gain2.gain.linearRampToValueAtTime(0.45,ctx.currentTime+0.25);
+        gain2.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.65);
+        osc2.start(ctx.currentTime+0.18);osc2.stop(ctx.currentTime+0.65);
+        osc2.onended=()=>ctx.close();
+      }else{
+        // Short tick — pitch rises as countdown nears zero
+        osc.type='sine';
+        const freq=type==='tick1'?1047:type==='tick3'?880:660;
+        osc.frequency.setValueAtTime(freq,ctx.currentTime);
+        gain.gain.setValueAtTime(0.18,ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.08);
+        osc.start(ctx.currentTime);osc.stop(ctx.currentTime+0.08);
+        osc.onended=()=>ctx.close();
+      }
+    }catch(e){}
+  }
+
   // rest timer tick
   useEffect(()=>{
-    if(!restTimer||restTimer.remaining<=0){clearInterval(restRef.current);if(restTimer?.remaining===0)setTimeout(()=>setRestTimer(null),800);return;}
+    if(!restTimer||restTimer.remaining<=0){clearInterval(restRef.current);if(restTimer?.remaining===0){playBeep('go');setTimeout(()=>setRestTimer(null),800);}return;}
+    if(restTimer.remaining<=10&&restTimer.remaining>0){
+      const t=restTimer.remaining;
+      playBeep(t<=3?'tick3':t<=1?'tick1':'tick');
+    }
     restRef.current=setInterval(()=>setRestTimer(p=>p?{...p,remaining:p.remaining-1}:null),1000);
     return()=>clearInterval(restRef.current);
   },[restTimer?.remaining]);
