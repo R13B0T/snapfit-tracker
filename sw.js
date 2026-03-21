@@ -1,7 +1,7 @@
 // SnapFit Tracker — Service Worker
 // Cache-first strategy for offline PWA support
 
-const CACHE_NAME = "snapfit-v1";
+const CACHE_NAME = "snapfit-v2";
 const STATIC_ASSETS = [
   "./index.html",
   "./manifest.json",
