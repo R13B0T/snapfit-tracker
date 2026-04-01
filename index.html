@@ -362,7 +362,7 @@ async function tryAIWorkout(dayType,sessionNum,recentIds,perfNotes,weights,focus
   const feelingNote=lastFeeling?.feeling?`\nLast session feeling: ${lastFeeling.feeling}${lastFeeling.note?` — "${lastFeeling.note}"`:""}. Adjust intensity accordingly.`:"";
   const msg=`Session #${sessionNum} - ${dayType.name} (Day ${dayType.id})\nAvoid repeating: ${recentIds.join(",")||"none"}\n${perfNotes?`Recent performance (format: id:avgReps/targetReps@weight[ratings]):\n${perfNotes}`:""}${feelingNote}\nGenerate 5-6 exercises with full muscle variety. Adjust weights/sets for progressive overload.\n{"sessionTitle":"title","focusTip":"tip max 14 words","exercises":[{"id":"snake_case","name":"Exact station name","equipNum":"num","sets":3,"reps":12,"weightIncrement":2.5,"startWeight":10,"muscleGroup":"Chest","variation":"Slow Eccentric (4-count) or null","note":"tip or null"}]}`;
   const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),9000);
-  const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:getAIHeaders(),body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system,messages:[{role:"user",content:msg}]}),signal:ctrl.signal});
+  const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:getAIHeaders(),body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:1000,system,messages:[{role:"user",content:msg}]}),signal:ctrl.signal});
   if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(err?.error?.message||`HTTP ${res.status}`);}
   const data=await res.json();
   const text=(data.content||[]).map(b=>b.text||"").join("").replace(/```json|```/g,"").trim();
@@ -373,7 +373,7 @@ async function tryAIRemix(exercise,otherNames,dayType,weights,focus,profile){
   const system=`Personal trainer AI, Snap Fitness Watagan Park.\n${EQUIP_STR}\n${fi}\nOnly use stations from list. Respond ONLY valid JSON.`;
   const msg=`Station #${exercise.equipNum} "${exercise.name}" busy. Find replacement for "${exercise.muscleGroup}". NOT: ${otherNames.join(",")}. Keep ${exercise.sets}x${exercise.reps}.\n{"id":"snake_case","name":"Exact station name","equipNum":"num","sets":${exercise.sets},"reps":${exercise.reps},"weightIncrement":${exercise.weightIncrement},"startWeight":${exercise.startWeight},"muscleGroup":"${exercise.muscleGroup||""}","note":"tip or null"}`;
   const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),7000);
-  const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:getAIHeaders(),body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:400,system,messages:[{role:"user",content:msg}]}),signal:ctrl.signal});
+  const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:getAIHeaders(),body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:400,system,messages:[{role:"user",content:msg}]}),signal:ctrl.signal});
   if(!res.ok)throw new Error(`HTTP ${res.status}`);
   const data=await res.json();
   return JSON.parse((data.content||[]).map(b=>b.text||"").join("").replace(/```json|```/g,"").trim());
@@ -923,6 +923,7 @@ function App(){
   const[showProfileSetup,setShowProfileSetup]=useState(false);
   const[showDurationPicker,setShowDurationPicker]=useState(false);
   const[pendingKickoff,setPendingKickoff]=useState(null); // {state, overrideDayIdx}
+  const[aiError,setAiError]=useState(null);
   const[postFeedback,setPostFeedback]=useState({feeling:null,note:""});
   const[showWarmup,setShowWarmup]=useState(false);
   const[showTipId,setShowTipId]=useState(null);
@@ -1041,8 +1042,8 @@ function App(){
     const lastFeeling=state.history[0]?.sessionFeeling||null;
     const focus=state.focus||DEFAULT_FOCUS;
     let w;
-    try{w=await tryAIWorkout(dayType,state.sessions+1,recentIds,perfNotes,state.weights,focus,profile,lastFeeling);}
-    catch{w=getFallback(dayType.id,state.sessions,recentIds,focus);}
+    try{setAiError(null);w=await tryAIWorkout(dayType,state.sessions+1,recentIds,perfNotes,state.weights,focus,profile,lastFeeling);}
+    catch(e){w=getFallback(dayType.id,state.sessions,recentIds,focus);setAiError(e?.message||"Unknown error");}
     // STORE dayIdx on workout so finish knows which day we actually did
     setWorkout({...w,dayType,dayIdx:idx});
     const wts={},sets={},ratings={},setWts={};
@@ -1220,6 +1221,7 @@ function App(){
                 <button onClick={()=>{hasGenerated.current=true;kickoff(appState,null,true);}} style={{background:"#1a1a1a",border:"1px solid #2e2e2e",color:"#777",borderRadius:10,padding:"8px 10px",cursor:"pointer",textAlign:"center",fontSize:"0.6rem",lineHeight:1.5}}><div style={{fontSize:"1.1rem"}}>🔀</div><div>remix</div></button>
               </div>
             </div>
+            {workout.isFallback&&aiError&&(<div style={{marginTop:10,background:"#1a0a0a",border:"1px solid #5c1818",borderRadius:10,padding:"8px 12px",display:"flex",alignItems:"flex-start",gap:8}}><span style={{fontSize:"0.8rem",flexShrink:0}}>⚠️</span><div style={{flex:1}}><div style={{fontSize:"0.62rem",color:"#ff6b6b",fontWeight:700,marginBottom:2}}>AI call failed — using built-in plan</div><div style={{fontSize:"0.6rem",color:"#8a4a4a",lineHeight:1.4,fontFamily:"monospace"}}>{aiError}</div></div><button onClick={()=>setAiError(null)} style={{background:"transparent",border:"none",color:"#555",cursor:"pointer",fontSize:"0.9rem",flexShrink:0,padding:0}}>✕</button></div>)}
             <div style={{marginTop:12,background:"#141414",border:"1px solid #252525",borderRadius:12,padding:"12px 14px"}}>
               <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:"0.75rem"}}>{workout.isFallback?"📋":"🤖"}</span><span style={{fontSize:"0.72rem",color:"#999",fontStyle:"italic",flex:1}}>{workout.focusTip}</span></div>
             </div>
