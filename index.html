@@ -21,11 +21,11 @@
 <div id="root"></div>
 <script type="text/babel">
 const{useState,useEffect,useRef}=React;
-const STORAGE_KEY="snapfit_v11";
-const OLD_STORAGE_KEY="snapfit_v10";
+const STORAGE_KEY="snapfit_v12";
+const OLD_STORAGE_KEY="snapfit_v11";
 const appStyle=`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap');*{box-sizing:border-box;margin:0;padding:0;}body{background:#0e0e0e;}::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-track{background:#1a1a1a;}::-webkit-scrollbar-thumb{background:#e31837;border-radius:2px;}@keyframes slideUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}@keyframes spin{to{transform:rotate(360deg)}}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes popIn{0%{transform:scale(0.85);opacity:0}60%{transform:scale(1.05)}100%{transform:scale(1);opacity:1}}.dur-slider{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:3px;outline:none;cursor:pointer;}.dur-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:24px;height:24px;border-radius:50%;background:#e31837;cursor:pointer;border:3px solid #0e0e0e;box-shadow:0 0 0 2px #e31837;}.dur-slider::-moz-range-thumb{width:24px;height:24px;border-radius:50%;background:#e31837;cursor:pointer;border:3px solid #0e0e0e;}@keyframes rebuildPulse{0%{opacity:1}50%{opacity:0.4}100%{opacity:1}}`;
 
-const DEFAULT_FOCUS={trainingFocus:"balanced",workoutDuration:45,deload:false,skipKnees:false,skipAnkle:false,skipShoulders:false,skipBack:false,skipChest:false,customNote:""};
+const DEFAULT_FOCUS={trainingFocus:"balanced",workoutDuration:45,deload:false,skipKnees:false,skipAnkle:false,skipShoulders:false,skipBack:false,skipChest:false,customNote:"",freeWeightMix:false,freeWeightPct:50};
 const DURATION_OPTIONS=[20,30,45,60,75,90];
 function getDurationConfig(mins){
   const m=mins||45;
@@ -49,8 +49,18 @@ const SEED_WEIGHTS={
   iso_lat_shoulder:{weight:29,lastWeight:29,lastAvgReps:10,lastTargetReps:10,weightIncrement:2.5,lastCompleted:true},
   tricep_cable:{weight:16.5,lastWeight:16.5,lastAvgReps:12,lastTargetReps:12,weightIncrement:2.5,lastCompleted:true},
   bicep_curl_mach:{weight:30,lastWeight:30,lastAvgReps:10,lastTargetReps:10,weightIncrement:2.5,lastCompleted:true},
+  fw_bench_press:{weight:14,lastWeight:14,lastAvgReps:10,lastTargetReps:10,weightIncrement:2.5,lastCompleted:true},
+  fw_incline_press:{weight:12,lastWeight:12,lastAvgReps:12,lastTargetReps:12,weightIncrement:2.5,lastCompleted:true},
+  fw_db_fly:{weight:8,lastWeight:8,lastAvgReps:15,lastTargetReps:15,weightIncrement:2.5,lastCompleted:true},
+  fw_decline_db:{weight:12,lastWeight:12,lastAvgReps:10,lastTargetReps:10,weightIncrement:2.5,lastCompleted:true},
+  fw_db_shoulder:{weight:10,lastWeight:10,lastAvgReps:12,lastTargetReps:12,weightIncrement:2.5,lastCompleted:true},
+  fw_lateral_raise:{weight:6,lastWeight:6,lastAvgReps:15,lastTargetReps:15,weightIncrement:2.5,lastCompleted:true},
+  fw_rear_delt_fly:{weight:6,lastWeight:6,lastAvgReps:15,lastTargetReps:15,weightIncrement:2.5,lastCompleted:true},
+  fw_db_row:{weight:16,lastWeight:16,lastAvgReps:12,lastTargetReps:12,weightIncrement:2.5,lastCompleted:true},
+  fw_db_curl:{weight:8,lastWeight:8,lastAvgReps:10,lastTargetReps:10,weightIncrement:2.5,lastCompleted:true},
+  fw_tricep_oh:{weight:8,lastWeight:8,lastAvgReps:12,lastTargetReps:12,weightIncrement:2.5,lastCompleted:true},
 };
-const SEED_NAMES={leg_press:"Leg Press",leg_curl:"Leg Curl",leg_extension:"Leg Extension",hip_thrust:"Hip Thrust",chest_press_db:"DB Chest Press",db_row:"DB Row",seated_chest_press:"Seated Chest Press",seated_row:"Seated Row",shoulder_press_mach:"Shoulder Press Mach",iso_lat_shoulder:"Iso Lat Shoulder",tricep_cable:"Tricep Cable",bicep_curl_mach:"Bicep Curl Mach"};
+const SEED_NAMES={leg_press:"Leg Press",leg_curl:"Leg Curl",leg_extension:"Leg Extension",hip_thrust:"Hip Thrust",chest_press_db:"DB Chest Press",db_row:"DB Row",seated_chest_press:"Seated Chest Press",seated_row:"Seated Row",shoulder_press_mach:"Shoulder Press Mach",iso_lat_shoulder:"Iso Lat Shoulder",tricep_cable:"Tricep Cable",bicep_curl_mach:"Bicep Curl Mach",fw_bench_press:"DB Bench Press",fw_incline_press:"DB Incline Press",fw_db_fly:"DB Chest Fly",fw_decline_db:"DB Decline Press",fw_db_shoulder:"DB Shoulder Press",fw_lateral_raise:"DB Lateral Raise",fw_rear_delt_fly:"DB Rear Delt Fly",fw_db_row:"DB Row (FW)",fw_db_curl:"DB Bicep Curl",fw_tricep_oh:"DB Tricep OH Ext"};
 
 const EXERCISE_LIBRARY={
   A:[[
@@ -117,6 +127,41 @@ const EXERCISE_LIBRARY={
   ]],
 };
 
+const FW_EQUIP_NUMS=new Set(["22","23","25","26","29","41"]);
+
+const FREE_WEIGHT_ALTERNATIVES={
+  // ── CHEST ─────────────────────────────────────────────────────────────────
+  seated_chest_press:{id:"fw_bench_press",  name:"DB Bench Press",   equipNum:"29",sets:3,reps:10,weightIncrement:2.5,startWeight:14,muscleGroup:"Chest",      tags:["upper","chest"],note:"Flat bench #26, dumbbells #29 — full range"},
+  seated_chest_p:    {id:"fw_bench_press",  name:"DB Bench Press",   equipNum:"29",sets:3,reps:10,weightIncrement:2.5,startWeight:14,muscleGroup:"Chest",      tags:["upper","chest"],note:"Flat bench #26, dumbbells #29 — full range"},
+  incline_press:     {id:"fw_incline_press",name:"DB Incline Press", equipNum:"29",sets:3,reps:12,weightIncrement:2.5,startWeight:12,muscleGroup:"Upper Chest",tags:["upper","chest"],note:"Adj bench #25 at 45°, dumbbells #29"},
+  incline_press_p:   {id:"fw_incline_press",name:"DB Incline Press", equipNum:"29",sets:3,reps:10,weightIncrement:2.5,startWeight:12,muscleGroup:"Upper Chest",tags:["upper","chest"],note:"Adj bench #25 at 45°, dumbbells #29"},
+  pec_fly:           {id:"fw_db_fly",       name:"DB Chest Fly",     equipNum:"29",sets:3,reps:15,weightIncrement:2.5,startWeight:8, muscleGroup:"Chest",      tags:["upper","chest"],note:"Flat bench #26, wide arc — feel the stretch"},
+  decline_press:     {id:"fw_decline_db",   name:"DB Decline Press", equipNum:"29",sets:3,reps:10,weightIncrement:2.5,startWeight:12,muscleGroup:"Lower Chest",tags:["upper","chest"],note:"Flat bench #26 feet elevated — controlled descent"},
+  // ── SHOULDERS ─────────────────────────────────────────────────────────────
+  shoulder_press_mach:{id:"fw_db_shoulder",  name:"DB Shoulder Press",equipNum:"29",sets:3,reps:12,weightIncrement:2.5,startWeight:10,muscleGroup:"Shoulders",tags:["upper","shoulder"],note:"Adj bench #25 upright — press overhead, control return"},
+  shoulder_press_p:   {id:"fw_db_shoulder",  name:"DB Shoulder Press",equipNum:"29",sets:3,reps:10,weightIncrement:2.5,startWeight:10,muscleGroup:"Shoulders",tags:["upper","shoulder"],note:"Adj bench #25 upright — press overhead, control return"},
+  iso_lat_shoulder:   {id:"fw_db_shoulder",  name:"DB Shoulder Press",equipNum:"29",sets:3,reps:10,weightIncrement:2.5,startWeight:10,muscleGroup:"Shoulders",tags:["upper","shoulder"],note:"Adj bench #25 upright — press overhead, control return"},
+  iso_lat_p:          {id:"fw_db_shoulder",  name:"DB Shoulder Press",equipNum:"29",sets:3,reps:10,weightIncrement:2.5,startWeight:10,muscleGroup:"Shoulders",tags:["upper","shoulder"],note:"Adj bench #25 upright — press overhead, control return"},
+  lateral_raise:      {id:"fw_lateral_raise",name:"DB Lateral Raise", equipNum:"29",sets:3,reps:15,weightIncrement:2.5,startWeight:6, muscleGroup:"Shoulders",tags:["upper","shoulder"],note:"Standing — controlled arc, slight forward lean"},
+  lateral_raise_q:    {id:"fw_lateral_raise",name:"DB Lateral Raise", equipNum:"29",sets:3,reps:15,weightIncrement:2.5,startWeight:6, muscleGroup:"Shoulders",tags:["upper","shoulder"],note:"Standing — controlled arc, slight forward lean"},
+  rear_delt:          {id:"fw_rear_delt_fly",name:"DB Rear Delt Fly", equipNum:"29",sets:3,reps:15,weightIncrement:2.5,startWeight:6, muscleGroup:"Rear Delts",tags:["upper","shoulder"],note:"Lean on flat bench #26 — wide arcs, no momentum"},
+  // ── BACK ROWS (lat pulldown intentionally excluded — stays cable) ──────────
+  seated_row:  {id:"fw_db_row",name:"DB Row",equipNum:"29",sets:4,reps:12,weightIncrement:2.5,startWeight:16,muscleGroup:"Back",tags:["upper","back"],note:"Brace on flat bench #26 — pull elbow to ceiling"},
+  seated_row_b:{id:"fw_db_row",name:"DB Row",equipNum:"29",sets:3,reps:15,weightIncrement:2.5,startWeight:16,muscleGroup:"Back",tags:["upper","back"],note:"Brace on flat bench #26 — pull elbow to ceiling"},
+  seated_row_p:{id:"fw_db_row",name:"DB Row",equipNum:"29",sets:3,reps:10,weightIncrement:2.5,startWeight:16,muscleGroup:"Back",tags:["upper","back"],note:"Brace on flat bench #26 — pull elbow to ceiling"},
+  high_row:    {id:"fw_db_row",name:"DB Row",equipNum:"29",sets:4,reps:10,weightIncrement:2.5,startWeight:16,muscleGroup:"Back",tags:["upper","back"],note:"Brace on flat bench #26 — pull elbow to ceiling"},
+  high_row_p:  {id:"fw_db_row",name:"DB Row",equipNum:"29",sets:3,reps:10,weightIncrement:2.5,startWeight:16,muscleGroup:"Back",tags:["upper","back"],note:"Brace on flat bench #26 — pull elbow to ceiling"},
+  low_row:     {id:"fw_db_row",name:"DB Row",equipNum:"29",sets:3,reps:12,weightIncrement:2.5,startWeight:16,muscleGroup:"Back",tags:["upper","back"],note:"Brace on flat bench #26 — pull elbow to ceiling"},
+  low_row_q:   {id:"fw_db_row",name:"DB Row",equipNum:"29",sets:3,reps:12,weightIncrement:2.5,startWeight:16,muscleGroup:"Back",tags:["upper","back"],note:"Brace on flat bench #26 — pull elbow to ceiling"},
+  // ── ARMS ──────────────────────────────────────────────────────────────────
+  bicep_curl_mach:  {id:"fw_db_curl",  name:"DB Bicep Curl",    equipNum:"29",sets:3,reps:10,weightIncrement:2.5,startWeight:8,muscleGroup:"Biceps", tags:["upper"],note:"Standing — strict form, supinate at top"},
+  bicep_curl_mach_b:{id:"fw_db_curl",  name:"DB Bicep Curl",    equipNum:"29",sets:3,reps:12,weightIncrement:2.5,startWeight:8,muscleGroup:"Biceps", tags:["upper"],note:"Standing — strict form, supinate at top"},
+  bicep_curl_q:     {id:"fw_db_curl",  name:"DB Bicep Curl",    equipNum:"29",sets:3,reps:12,weightIncrement:2.5,startWeight:8,muscleGroup:"Biceps", tags:["upper"],note:"Standing — strict form, supinate at top"},
+  preacher_curl:    {id:"fw_db_curl",  name:"DB Bicep Curl",    equipNum:"29",sets:3,reps:12,weightIncrement:2.5,startWeight:8,muscleGroup:"Biceps", tags:["upper"],note:"Seated on bench — strict curl, squeeze at top"},
+  tricep_cable:     {id:"fw_tricep_oh",name:"DB Tricep OH Ext", equipNum:"29",sets:3,reps:12,weightIncrement:2.5,startWeight:8,muscleGroup:"Triceps",tags:["upper"],note:"Overhead DB extension — elbows close, full extension"},
+  tricep_cable_p:   {id:"fw_tricep_oh",name:"DB Tricep OH Ext", equipNum:"29",sets:3,reps:12,weightIncrement:2.5,startWeight:8,muscleGroup:"Triceps",tags:["upper"],note:"Overhead DB extension — elbows close, full extension"},
+};
+
 const DAY_TYPES=[{id:"A",label:"DAY A",name:"Push & Legs",color:"#e31837"},{id:"B",label:"DAY B",name:"Pull & Core",color:"#4fc3f7"},{id:"C",label:"DAY C",name:"Full Body Power",color:"#69f0ae"}];
 
 // Unified exercise name map from entire library (used for CSV export/import)
@@ -150,6 +195,29 @@ function applyFocus(exercises,focus){
   if(focus.deload)f=f.map(e=>({...e,reps:Math.round(e.reps*1.25),sets:Math.max(2,e.sets-1),startWeight:Math.round(e.startWeight*0.8*2)/2}));
   return f.slice(0,6);
 }
+function applyFreeWeightMix(exercises,focus,sessionNum){
+  if(!focus.freeWeightMix)return exercises;
+  const pct=(focus.freeWeightPct||50)/100;
+  const eligibleIndices=exercises
+    .map((_,i)=>i)
+    .filter(i=>!FW_EQUIP_NUMS.has(exercises[i].equipNum)&&FREE_WEIGHT_ALTERNATIVES[exercises[i].id]);
+  if(!eligibleIndices.length)return exercises;
+  const numToSwap=Math.round(eligibleIndices.length*pct);
+  if(!numToSwap)return exercises;
+  // Rotate which exercises get swapped across sessions so the mix varies
+  const offset=(sessionNum||0)%eligibleIndices.length;
+  const rotated=[...eligibleIndices.slice(offset),...eligibleIndices.slice(0,offset)];
+  const toSwapSet=new Set(rotated.slice(0,numToSwap));
+  // Seed used IDs with exercises that are NOT being swapped to prevent duplicates
+  const usedFwIds=new Set(exercises.filter((_,i)=>!toSwapSet.has(i)).map(e=>e.id));
+  return exercises.map((e,i)=>{
+    if(!toSwapSet.has(i))return e;
+    const alt=FREE_WEIGHT_ALTERNATIVES[e.id];
+    if(!alt||usedFwIds.has(alt.id))return e;
+    usedFwIds.add(alt.id);
+    return{...alt,sets:e.sets}; // preserve duration-adjusted set count
+  });
+}
 function getFallback(dayId,sessionNum,recentIds,focus){
   const pool=EXERCISE_LIBRARY[dayId][sessionNum%3];
   const focused=applyFocus(pool,focus);
@@ -157,6 +225,7 @@ function getFallback(dayId,sessionNum,recentIds,focus){
   let exs=focused.filter(e=>!recentIds.slice(0,6).includes(e.id)).length>=3?focused.filter(e=>!recentIds.slice(0,6).includes(e.id)):focused;
   // Cap count and sets to match duration
   exs=exs.slice(0,dur.maxEx).map(e=>({...e,sets:dur.setsHint<=2?Math.min(e.sets,2):dur.setsHint<=3?Math.min(e.sets,3):e.sets}));
+  if(focus.freeWeightMix)exs=applyFreeWeightMix(exs,focus,sessionNum);
   let tip=FB_TIPS[dayId][sessionNum%FB_TIPS[dayId].length];
   if(focus.deload)tip="Deload week — lighter loads, perfect form, full recovery";
   return{sessionTitle:FB_TITLES[dayId][sessionNum%FB_TITLES[dayId].length],focusTip:tip,exercises:exs,isFallback:true};
@@ -193,7 +262,7 @@ function buildFocusInstructions(focus,profile){
     const cycleStr=`${profile.workoutsPerCycle||3}-day cycle`;
     p.unshift(`USER PROFILE: ${ageStr}, ${genderStr}, goal: ${goalStr}, training on a ${cycleStr}. Tailor intensity, rep ranges, and progressions accordingly.`);
   }
-  if(focus.trainingFocus==="upper")p.push("FOCUS: Upper body ONLY.");if(focus.trainingFocus==="lower")p.push("FOCUS: Lower body ONLY.");if(focus.trainingFocus==="core")p.push("FOCUS: Core + upper.");if(focus.deload)p.push("DELOAD: Reduce weights 20%, increase reps 2-3.");if(focus.skipKnees)p.push("SKIP KNEES: No leg press/extension/squats.");if(focus.skipAnkle)p.push("SKIP ANKLE: No calf raises, lunges, sled, single-leg balance.");if(focus.skipShoulders)p.push("SKIP SHOULDERS: No overhead press or lateral raises.");if(focus.skipBack)p.push("SKIP BACK: No rows or back extensions.");if(focus.skipChest)p.push("SKIP CHEST: No pressing or pec fly.");if(focus.customNote)p.push(`USER NOTE: ${focus.customNote}`);return"\n\nSPECIAL INSTRUCTIONS (MUST FOLLOW):\n"+p.join("\n");
+  if(focus.trainingFocus==="upper")p.push("FOCUS: Upper body ONLY.");if(focus.trainingFocus==="lower")p.push("FOCUS: Lower body ONLY.");if(focus.trainingFocus==="core")p.push("FOCUS: Core + upper.");if(focus.deload)p.push("DELOAD: Reduce weights 20%, increase reps 2-3.");if(focus.skipKnees)p.push("SKIP KNEES: No leg press/extension/squats.");if(focus.skipAnkle)p.push("SKIP ANKLE: No calf raises, lunges, sled, single-leg balance.");if(focus.skipShoulders)p.push("SKIP SHOULDERS: No overhead press or lateral raises.");if(focus.skipBack)p.push("SKIP BACK: No rows or back extensions.");if(focus.skipChest)p.push("SKIP CHEST: No pressing or pec fly.");if(focus.freeWeightMix){const pct=focus.freeWeightPct||50;p.push(`FREE WEIGHTS MIX (${pct}%): For UPPER BODY exercises, include approximately ${pct}% free weight movements instead of machines. Free weight stations: #29 Dumbbells & Rack, #26 Flat Bench, #25 Adj Bench, #22 Olympic Bench, #41 Half Rack. Good DB alternatives: DB Bench Press (#29+#26), DB Incline Press (#29+#25), DB Chest Fly (#29+#26), DB Shoulder Press (#29+#25), DB Lateral Raise (#29), DB Rear Delt Fly (#29+#26), DB Row (#29+#26), DB Bicep Curl (#29), DB Tricep OH Extension (#29). ALWAYS KEEP AS MACHINES: all lower body, Glute Drive (#36), lat pulldown (#24), back extension (#32), ab crunch (#48). Never use free weights for legs or glutes.`);}if(focus.customNote)p.push(`USER NOTE: ${focus.customNote}`);return"\n\nSPECIAL INSTRUCTIONS (MUST FOLLOW):\n"+p.join("\n");
 }function getNextSetSuggestion(weight,reps,targetReps,rating,inc){
   if(!rating)return null;const r=EFFORT_RATINGS.find(e=>e.key===rating);if(!r)return null;
   if(rating==="light"&&reps>=targetReps)return{msg:`${r.emoji} Too light — try ${+(weight+inc).toFixed(1)}kg next set`,color:r.color};
@@ -691,6 +760,34 @@ function FocusView({focus,onUpdate,onApply,onDurationChange,isFirstRun=false}){
         <div style={{width:44,height:26,borderRadius:13,background:local.deload?"#ffa040":"#222",position:"relative",flexShrink:0,marginLeft:12,transition:"background 0.25s"}}><div style={{position:"absolute",top:3,left:local.deload?20:3,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/></div>
       </div>
     </div>
+    <div style={{background:"#111",border:`1.5px solid ${local.freeWeightMix?"#69f0ae":"#1e1e1e"}`,borderRadius:12,padding:"16px",marginBottom:14}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}} onClick={()=>tog("freeWeightMix")}>
+        <div>
+          <div style={{fontSize:"0.65rem",color:"#69f0ae",fontWeight:700,letterSpacing:"0.1em",marginBottom:4}}>🏋️ FREE WEIGHT MIX</div>
+          <div style={{fontSize:"0.78rem",color:local.freeWeightMix?"#f0f0f0":"#888",fontWeight:600}}>
+            {local.freeWeightMix?`${local.freeWeightPct||50}% of upper-body on dumbbells`:"Upper body stays on machines"}
+          </div>
+        </div>
+        <div style={{width:44,height:26,borderRadius:13,background:local.freeWeightMix?"#69f0ae":"#222",position:"relative",flexShrink:0,marginLeft:12,transition:"background 0.25s"}}>
+          <div style={{position:"absolute",top:3,left:local.freeWeightMix?20:3,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+        </div>
+      </div>
+      {local.freeWeightMix&&(
+        <div style={{marginTop:14}}>
+          <div style={{fontSize:"0.62rem",color:"#555",marginBottom:8,letterSpacing:"0.06em"}}>HOW MUCH UPPER BODY GOES FREE WEIGHT?</div>
+          <div style={{display:"flex",gap:6}}>
+            {[25,50,75,100].map(pct=>{
+              const active=(local.freeWeightPct||50)===pct;
+              return(<button key={pct} onClick={e=>{e.stopPropagation();setLocal(p=>({...p,freeWeightPct:pct}));}}
+                style={{flex:1,height:42,borderRadius:10,border:`1.5px solid ${active?"#69f0ae":"#252525"}`,
+                  background:active?"#0d1a10":"#161616",color:active?"#69f0ae":"#666",
+                  cursor:"pointer",fontSize:"0.82rem",fontWeight:700}}>{pct}%</button>);
+            })}
+          </div>
+          <div style={{fontSize:"0.6rem",color:"#3a3a3a",marginTop:8}}>Legs, hip drives &amp; lat pulldown always stay as machines</div>
+        </div>
+      )}
+    </div>
     <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:12,padding:"16px",marginBottom:14}}>
       <div style={{fontSize:"0.65rem",color:"#ffd740",fontWeight:700,letterSpacing:"0.1em",marginBottom:12}}>⚠️ SKIP THESE TODAY</div>
       <div style={{display:"flex",flexDirection:"column",gap:8}}>{restrictions.map(r=>{const active=local[r.key];return(<div key={r.key} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${active?"#ffd740":"#252525"}`,background:active?"#1a1800":"#161616",cursor:"pointer"}} onClick={()=>tog(r.key)}>
@@ -788,11 +885,11 @@ function App(){
   function startRest(ex,hasNext){if(!hasNext)return;clearInterval(restRef.current);const s=getRestSecs(ex);setRestTimer({exId:ex.id,exName:ex.name,remaining:s,total:s});}
   function skipRest(){clearInterval(restRef.current);setRestTimer(null);}
 
-  // load storage (with v10→v11 migration)
+  // load storage (with v11→v12 migration)
   useEffect(()=>{
     try{
       let saved=localStorage.getItem(STORAGE_KEY);
-      // Migrate from v10 if v11 doesn't exist yet
+      // Migrate from v11 if v12 doesn't exist yet
       if(!saved){
         const old=localStorage.getItem(OLD_STORAGE_KEY);
         if(old){
@@ -803,6 +900,8 @@ function App(){
           if(!p.focus)p.focus={...DEFAULT_FOCUS};
           if(p.focus.skipAnkle===undefined)p.focus.skipAnkle=false;
           if(p.focus.workoutDuration===undefined)p.focus.workoutDuration=45;
+          if(p.focus.freeWeightMix===undefined)p.focus.freeWeightMix=false;
+          if(p.focus.freeWeightPct===undefined)p.focus.freeWeightPct=50;
           if(!p.exerciseHistory)p.exerciseHistory={};
           localStorage.setItem(STORAGE_KEY,JSON.stringify(p));
           localStorage.removeItem(OLD_STORAGE_KEY);
@@ -814,6 +913,8 @@ function App(){
         if(!p.focus)p.focus={...DEFAULT_FOCUS};
         if(p.focus.skipAnkle===undefined)p.focus.skipAnkle=false;
         if(p.focus.workoutDuration===undefined)p.focus.workoutDuration=45;
+        if(p.focus.freeWeightMix===undefined)p.focus.freeWeightMix=false;
+        if(p.focus.freeWeightPct===undefined)p.focus.freeWeightPct=50;
         if(p.focusConfigured===undefined)p.focusConfigured=false;
         if(!p.exerciseHistory)p.exerciseHistory={};
         if(!p.profile)p.profile={...DEFAULT_PROFILE};
@@ -963,7 +1064,7 @@ function App(){
   const completedSets=Object.values(sessionSets).flat().filter(r=>r!==null).length;
   const pct=totalSets>0?(completedSets/totalSets)*100:0;
   const allComplete=totalSets>0&&completedSets===totalSets;
-  const activeBadges=[focus.trainingFocus!=="balanced"&&{label:focus.trainingFocus==="upper"?"💪 Upper":focus.trainingFocus==="lower"?"🦵 Lower":"🎯 Core",color:"#e31837"},focus.deload&&{label:"📉 Deload",color:"#ffa040"},focus.skipKnees&&{label:"🦵 No Knees",color:"#ffd740"},focus.skipAnkle&&{label:"🦶 No Ankle",color:"#ffd740"},focus.skipShoulders&&{label:"💆 No Shoulder",color:"#ffd740"},focus.skipBack&&{label:"🔙 No Back",color:"#ffd740"},focus.skipChest&&{label:"🫁 No Chest",color:"#ffd740"}].filter(Boolean);
+  const activeBadges=[focus.trainingFocus!=="balanced"&&{label:focus.trainingFocus==="upper"?"💪 Upper":focus.trainingFocus==="lower"?"🦵 Lower":"🎯 Core",color:"#e31837"},focus.deload&&{label:"📉 Deload",color:"#ffa040"},focus.skipKnees&&{label:"🦵 No Knees",color:"#ffd740"},focus.skipAnkle&&{label:"🦶 No Ankle",color:"#ffd740"},focus.skipShoulders&&{label:"💆 No Shoulder",color:"#ffd740"},focus.skipBack&&{label:"🔙 No Back",color:"#ffd740"},focus.skipChest&&{label:"🫁 No Chest",color:"#ffd740"},focus.freeWeightMix&&{label:`🏋️ ${focus.freeWeightPct||50}%FW`,color:"#69f0ae"}].filter(Boolean);
 
   return(<div style={{minHeight:"100vh",background:"#0e0e0e",fontFamily:"'DM Sans',sans-serif",color:"#f0f0f0",paddingBottom:130}}>
     <style>{appStyle}</style>
